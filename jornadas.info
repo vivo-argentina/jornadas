@@ -1,0 +1,7 @@
+name = jornadas
+description = Jornada laboral
+package = organicfruits
+version = 7.0 beta
+core = 7.x
+
+files[] = handlers/jornada_handler_field_time_total_jornada.inc

@@ -1,0 +1,685 @@
+<?php
+define('CLOCK_DATA_UNCONFIRMED',0);
+define('CLOCK_DATA_CONFIRMED',1);
+
+define('UN_MINUTO',60);
+define('UNA_HORA',3600);
+define('UN_DIA',86400);
+define('SIETE_DIAS',604800);
+
+include ('jornadas.test.inc');
+function jornadas_init(){
+
+  module_load_include('inc', 'jornadas', 'jornadas.clock');
+  module_load_include('inc', 'jornadas', 'jornadas.productividad');
+  /*process_clock_data(1,1421258789);
+  set_planta(1421258789);
+*/
+
+/*  $date=strtotime('8/1/2015 05:00:00');
+
+ lab_test($date);
+ die('sss');
+ /* process_clock_data(1,$date);
+  echo "end init";
+  die();*/
+}
+function jornadas_menu() {
+  $items['admin/structure/create_recurrences_by_month'] = array(
+    'title' => 'Crear recurrencias de jornada',
+    'page callback' => 'create_recurrences_by_month',
+    'page arguments' => array(),
+    'access arguments' => array('admin jornadas'),
+  );
+
+  $items['presentes'] = array(
+    'title' => 'Presentes',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('set_presentes'),
+    'access arguments' => array('admin personal'),
+  );
+  $items['import'] = array(
+    'title' => 'jornadas',
+    'page callback' => 'clock_bulk_import',
+    'page arguments' => array(''),
+    'file' => 'jornadas.clock.inc',
+    'access arguments' => array('admin personal'),
+  );
+
+$items['jornadas/set_planta/%'] = array(
+    'title' => 'jornadas',
+    'page callback' => 'set_planta_now',
+    'page arguments' => array(2),
+    'file' => 'jornadas.clock.inc',
+    'access arguments' => array('admin personal'),
+  );
+
+  $items['jornadas/clock/import_personal'] = array(
+    'title' => 'jornadas',
+    'page callback' => 'clock_import_personal',
+    'page arguments' => array(''),
+    'file' => 'jornadas.clock.inc',
+    'access arguments' => array('admin personal'),
+  );
+
+
+   $items['jornadas/recurrencia/%/edit'] = array(
+      'title' => 'Presentes',
+      'page callback' => 'drupal_get_form',
+      'page arguments' => array('personal_jornada_edit',2),
+      'access arguments' => array('admin personal'),
+    );
+   
+   $items['jornadas/recurrencia/%/delete'] = array(
+      'title' => 'Presentes',
+      'page callback' => 'drupal_get_form',
+      'page arguments' => array('personal_jornada_delete',2),
+      'access arguments' => array('admin personal'),
+    );
+
+   $items['jornadas/productividad/processday/%'] = array(
+      'title' => 'Presentes',
+      'page callback' => 'productividad_import_day',
+      'page arguments' => array(3),
+      'access arguments' => array('admin personal'),
+      'file' => 'jornadas.productividad.inc',
+  );
+$items['jornadas/productividad/procesar'] = array(
+      'title' => 'Presentes',
+      'page callback' => 'drupal_get_form',
+      'page arguments' => array('bulk_process_poductividad',3),
+      'access arguments' => array('admin personal'),
+      'file' => 'jornadas.productividad.inc',
+  );
+$items['jornadas/productividad/ajuste/%/%'] = array(
+      'title' => 'Presentes',
+      'page callback' => 'drupal_get_form',
+      'page arguments' => array('ajuste_productividad',3,4),
+      'access arguments' => array('admin personal'),
+      'file' => 'jornadas.productividad.inc',
+  );
+
+$items['jornadas/productividad/detalle_embalador/%/%'] = array(
+      'title' => 'Detalle embalador',
+      'page callback' => 'detalle_embalador',
+      'page arguments' => array(3,4),
+      'access arguments' => array('admin personal'),
+      'file' => 'jornadas.productividad.inc',
+  );
+$items['jornadas/valores'] = array(
+      'title' => 'Valores por periodo',
+      'page callback' => 'valores_table',
+      'page arguments' => array(),
+      'access arguments' => array('admin personal'),
+      'file' => 'jornadas.valores.inc',
+  );
+   
+$items['jornadas/valores/perido/%/%'] = array(
+      'title' => 'Valores por periodo',
+      'page callback' => 'drupal_get_form',
+      'page arguments' => array('valores_jornada',3,4),
+      'access arguments' => array('admin personal'),
+      'file' => 'jornadas.valores.inc',
+  );
+
+$items['jornadas/resumen/%/%'] = array(
+      'title' => 'Valores por periodo',
+      'page callback' => 'personal_mensual',
+      'page arguments' => array(2,3),
+      'access arguments' => array('admin personal'),
+      'file' => 'jornadas.liquidaciones.inc',
+  );
+   
+
+$items['jornadas/resumen/%/%/%'] = array(
+      'title' => 'Valores por periodo',
+      'page callback' => 'personal_resumen_mensual',
+      'page arguments' => array(2,3,4),
+      'access arguments' => array('admin personal'),
+      'file' => 'jornadas.liquidaciones.inc',
+  );
+   
+
+  return $items;
+}
+
+
+
+
+
+
+/**
+ * Implementation of hook_action_info().
+ */
+function jornadas_action_info() {
+
+  return array(
+    'jornadas_recurrecia_set_planta_1' => array(
+      'description' => t('Planta 1'),
+      'label' => t('Poner en planta 1'),
+      'type' => 'entity',
+      'triggers' => array('any'),
+      'behavior' => array('changes_property'),
+      'vbo_configurable' => FALSE,
+      'pass rows' => TRUE,
+   
+    ),
+    'jornadas_recurrecia_set_planta_2' => array(
+      'description' => t('Planta 2'),
+      'label' => t('Poner en planta 2'),
+      'type' => 'entity',
+      'triggers' => array('any'),
+      'behavior' => array('changes_property'),
+      'vbo_configurable' => FALSE,
+      'pass rows' => TRUE,
+   
+    ),
+
+    'jornadas_recurrecia_set_empacador' => array(
+      'label' => t('Marcar como empacador'),
+      'type' => 'entity',
+      'triggers' => array('any'),
+      'behavior' => array('changes_property'),
+      'vbo_configurable' => FALSE,
+      'pass rows' => TRUE,
+   
+    ),
+    'jornadas_recurrecia_set_otras_tareas' => array(
+      'label' => t('Marcar como otras tareas'),
+      'type' => 'entity',
+      'triggers' => array('any'),
+      'behavior' => array('changes_property'),
+      'vbo_configurable' => FALSE,
+      'pass rows' => TRUE,
+   
+    ),
+
+    'jornadas_recurrecia_set_acomodador' => array(
+      'label' => t('Marcar como acomodador'),
+      'type' => 'entity',
+      'triggers' => array('any'),
+      'behavior' => array('changes_property'),
+      'vbo_configurable' => FALSE,
+      'pass rows' => TRUE,
+   
+    ),
+
+ 'jornadas_recurrecia_unificar' => array(
+      'label' => t('Unificar varios registros'),
+      'type' => 'entity',
+      'triggers' => array('any'),
+      'vbo_configurable' => FALSE,
+      'pass rows' => TRUE,
+   
+    ),
+
+
+  );
+}
+function jornadas_recurrecia_set_empacador( &$entity, $context ){
+    $entity->work_type='empacador';
+}
+function jornadas_recurrecia_set_acomodador( &$entity, $context ){
+    $entity->work_type='acomodador';
+}
+function jornadas_recurrecia_set_otras_tareas( &$entity, $context ){
+    $entity->work_type='varios';
+}
+
+function jornadas_recurrecia_set_planta_1( &$entity, $context ){
+    $entity->planta=1;
+}
+function jornadas_recurrecia_set_planta_2( &$entity, $context ){
+    $entity->planta=2;
+}
+
+function jornadas_recurrecia_unificar($entity,$context){
+  print_r($entity);
+  print_r($context);
+  die();
+}
+
+function jornadas_recurrecia_delete_action( &$entity, $context ){
+
+  db_delete('personal_jornada')->condition('jpid',$entity->jpid)->execute();
+  drupal_set_message("La informacion {$entity->jpid} fue eliminada");
+
+}
+
+function personal_jornada_edit($form, &$from_state,$jpid){
+
+  $recurrencia=jornadas_personal_jornada_load($jpid);
+  $pid=array_shift(entity_load('data_personal',array($recurrencia->pid)));
+  $jid=array_shift(entity_load('data_jornadas',array($recurrencia->jid)));
+  drupal_set_title("Editando {$pid->name} " . format_date($jid->start_time));
+  $form['jpid']=array('#value'=>$recurrencia->jpid,'#type'=>'value');
+  $form['pid']=array('#value'=>$recurrencia->pid,'#type'=>'value');
+  $form['jid']=array('#value'=>$jid,'#type'=>'value');
+
+  $form['work_type']=array('#type' =>'select','#options' => array('Empacador'=>'Empacador','Acomodador'=>'Acomodador','Varios'=>'varios'),'#default_value'=>$recurrencia->work_type);
+  $form['start_time']=array('#type' =>'textfield','#size'=>6,'#default_value'=>date("H:i",$recurrencia->start_time) );
+  $form['end_time']=array('#type' =>'textfield','#size'=>6,'#default_value'=>date("H:i",$recurrencia->end_time) );
+  $form['planta']=array('#type' =>'select' ,'#options' => array(1=>'Planta 1',2=>'Planta 2'),'#default_value'=>$recurrencia->planta);
+
+  $form['submit'] = array('#type' => 'submit', '#value' => t('ok'));
+  return $form;
+
+
+}
+function personal_jornada_edit_validate($form, &$from_state){
+  $from_state['values']['start_time']=strtotime($from_state['values']['start_time'],$from_state['values']['jid']->start_time);
+  $from_state['values']['end_time']=strtotime($from_state['values']['end_time'],$from_state['values']['jid']->start_time);
+
+}
+function personal_jornada_edit_submit($form, &$from_state){
+
+  db_update('personal_jornada')->fields(array(
+    'planta'=>$from_state['values']['planta'],
+    'work_type'=>$from_state['values']['work_type'],
+    'start_time'=>$from_state['values']['start_time'],
+    'end_time'=>$from_state['values']['end_time'],
+    'start_confirmed'=>CLOCK_DATA_CONFIRMED,
+    'end_confirmed'=>CLOCK_DATA_CONFIRMED,
+
+    )) ->condition('jpid',$from_state['values']['jpid']) ->execute();
+}
+function personal_jornada_delete($form, &$from_state,$jpid){
+
+  $recurrencia=jornadas_personal_jornada_load($jpid);
+  $form['jpid']=array('#value'=>$recurrencia->jpid,'#type'=>'value');
+  drupal_set_title('¿Esta seguro de eliminar esta informacion?');
+  $form['txt']=array('#markup'=>'La informacion borrada no puede recuperarse');
+  
+  $form['submit'] = array('#type' => 'submit', '#value' => t('ok'));
+  return $form;
+
+}
+function personal_jornada_delete_submit($form, &$from_state){
+  db_delete('personal_jornada')->condition('jpid',$from_state['values']['jpid'])->execute();
+  drupal_set_message("La informacion {$from_state['values']['jpid']} fue eliminada");
+}
+
+function jornadas_personal_jornada_load($jpid){
+  return db_select('personal_jornada','pj')->fields('pj')->condition('jpid',$jpid)->execute()->fetchObject();
+}
+
+/**
+ * Implementation of hook_theme().
+ */
+function jornadas_theme() {
+  return array(
+    'jornada_table' => array(
+      // The renderable element is the form.
+      'render element' => 'form',
+    ),
+
+  );
+}
+
+
+function get_jid_by_daystamp($timestamp){
+    $daystamp=floor($timestamp/UN_DIA);
+    $j=db_select('jornada','j') -> fields('j','jid')->condition('daystamp',$daystamp)->execute();
+
+}
+/**
+* function hours_by_day_number()
+* 
+* Array con horas laborables por dia
+*
+*/
+function hours_by_day_number(){
+    
+    $vals=get_valores_for_time(REQUEST_TIME);
+    return array($vals['horasdia']);
+
+    return array(0=>
+      array(
+            array("8:00","12:00"),
+            array("8:00","12:00"),
+            array("8:00","12:00"),
+            array("8:00","12:00"),
+            array("8:00","12:00"),
+            array("8:00","12:00"),
+        ),
+
+      1=>
+      array(
+            array("16:00","20:00"),
+            array("16:00","20:00"),
+            array("16:00","20:00"),
+            array("16:00","20:00"),
+            array("16:00","20:00"),
+        ),
+      );
+}
+
+/**
+* function hours_by_day_number()
+* 
+* Array con horas laborables por dia
+*
+*/
+function get_value_by_period($codigo,$start=Null,$end=Null){
+    $query=db_select('valores_perido','vp');
+    $query ->fields('vp','valor');
+    $query ->condition('codigo', $codigo);
+    if($start) $query ->condition('start_time', $start,'>');
+    if($end) $query ->condition('end_time', $end,'<');
+
+    return $query ->execute() ->fetchField();
+
+}
+
+
+function create_recurrences_by_month($delta=0,$type='normal'){
+    $return="";
+    $start=strtotime("first day of next month");
+    $end=strtotime("last day of next month");
+
+    
+    $hours_by_day_number=hours_by_day_number($delta);
+    for($day=$start; $day<=$end;$day=$day+UN_DIA){
+        $return .= $day. "<br>";
+        $day_number=date('N',$day);
+        if(!$hours_by_day_number[$delta][$day_number]) continue;
+
+        $jornada=new stdClass();
+        $jornada->type=$type;
+        $jornada->delta=$delta;
+
+        $jornada->start_time=strtotime(date('Y-m-d',$day) . ' 00:00' );
+        $jornada->end_time=strtotime(date('Y-m-d',$day) . ' 23:59' );
+        $jornada->duration=$hours_by_day_number[$delta][$day_number]*UNA_HORA;
+        $jornada->daystamp=floor($day/UN_DIA);
+
+        try {
+            drupal_write_record('jornadas',$jornada);
+            
+        } catch (Exception $e) {
+            $return .= $e->getMessage();
+        }
+
+
+    }
+    return $return;
+}
+
+function jornada_create($timestamp,$delta=0){
+        $day_number=date('N',$timestamp);
+        $hours_by_day_number=hours_by_day_number($delta);
+
+        if($hours_by_day_number[$delta][$day_number]==0) {
+           drupal_set_message('No hay jornadas para el dia ' . $day_number,'error');
+           return false;
+           $hours_by_day_number[$delta][$day_number][0]='07:00';
+           $hours_by_day_number[$delta][$day_number][1]='14:00';
+        }
+
+        $jornada=new stdClass();
+        $jornada->type=$type;
+        $jornada->delta=$delta;
+
+        $jornada->start_time=strtotime(date('Y-m-d',$timestamp) . ' 00:00' );
+        $jornada->end_time=strtotime(date('Y-m-d',$timestamp) . ' 23:59:58' );
+        $jornada->duration=$hours_by_day_number[$delta][$day_number]*UNA_HORA;
+
+
+        $jornada->daystamp=floor($timestamp/UN_DIA);
+
+        try {
+            drupal_write_record('jornadas',$jornada);
+            
+        } catch (Exception $e) {
+           drupal_set_message( $e->getMessage(),'error');
+           return ;
+        }
+        return  $jornada;
+
+}
+
+function set_presentes($form, &$form_state,$delta=0){
+
+    $personal=get_personal_activo();
+
+    if($_GET['jid']){
+      $jid=array_shift(entity_load('data_jornadas',array(intval($_GET['jid']))));
+    } else {
+      $jid=array_shift(get_jid(time(),$delta));
+      
+    }
+
+    $registros=get_last_recurrencias_by_jid($jid->jid);
+    $horas=hours_by_day_number();
+
+
+//    $form['delta']=array('#type'=>'value','#value'=>$delta);
+    $form['jid']=array('#type'=>'value','#value'=>$jid);
+    $form['personal']=array('#tree'=>true,'#theme'=>'jornada_table','#header'=>array('P','Nombre','Ingreso','Planta','Labor'));
+  //
+
+
+    foreach ($personal as $persona){
+        $form['personal'][$persona->pid]=array(
+            '#tree'=>true, 
+            '#class'=>array('pid'. $persona->pid)          
+        );
+
+        $start=($registros[$persona->pid])?time(): $jid->start_time;
+        $present=($registros[$persona->pid])?true: false;
+
+        $form['personal'][$persona->pid]['present']=array('#type' =>'checkbox','#default_value'=>$present );
+        $form['personal'][$persona->pid]['title']=array('#markup' =>$persona->name );
+
+        $form['personal'][$persona->pid]['start_time']=array('#type' =>'textfield','#size'=>6,'#default_value'=>date("H:i",$start) );
+//        $form['personal'][$persona->pid]['end_time']=array('#type' =>'checkbox', );
+        $form['personal'][$persona->pid]['planta']=array('#type' =>'select' ,'#options' => array(1=>'Planta 1',2=>'Planta 2'),'#default_value'=>@$registros[$persona->pid]->planta);
+        $form['personal'][$persona->pid]['work_type']=array('#type' =>'select','#options' => array('Empacador'=>'Empacador','Acomodador'=>'Acomodador','Varios'=>'varios'));
+
+
+    }
+    $form['submit'] = array('#type' => 'submit', '#value' => t('ok'));
+    return $form;
+
+
+}
+
+function set_presentes_submit($form, &$form_state){
+
+  $recurrencias=get_last_recurrencias_by_jid($form_state['values']['jid']->jid);
+
+  foreach ($form_state['values']['personal'] as $key => $value) {
+  
+        if(!$value['present'] && !$recurrencias[$key]) continue;
+
+        $value['start_time']=strtotime($value['start_time'] , $form_state['values']['jid']->start_time);
+
+        if(!$value['present'] && $recurrencias[$key]){
+            db_update('personal_jornada')
+                ->fields(array('end_time'=>$value['start_time']))
+                ->condition('jpid',$recurrencias[$key]->jpid)
+                ->execute();
+            continue;
+        }
+
+        if(!data_is_changed($recurrencias[$key],$value)) continue;
+          db_update('personal_jornada')
+            ->fields(array('end_time'=>$value['start_time']))
+            ->condition('jpid',$recurrencias[$key]->jpid)
+            ->execute();
+
+        
+        $recurrencia=new stdClass();
+        $recurrencia->pid=$key;
+        $recurrencia->jid=$form_state['values']['jid']->jid;
+        $recurrencia->start_time=$value['start_time'];
+        $recurrencia->work_type=$value['work_type'];
+        $recurrencia->present=$value['present'];
+        $recurrencia->planta=$value['planta'];
+
+       try {
+              drupal_write_record('personal_jornada',$recurrencia);
+              
+          } catch (Exception $e) {
+             drupal_set_message( $e->getMessage());
+          }
+  }
+
+}
+
+
+function data_is_changed($old,$new){
+ return ( $new['work_type']!=$old->work_type || $new['planta']!=$old->planta );
+}
+function get_jid($time,$delta=0){
+
+    $daystamp=floor((($time/60)/60)/24);
+    $query = new EntityFieldQuery();
+
+
+    $query->entityCondition('entity_type', 'data_jornadas')
+      ->propertyCondition('delta',$delta)
+
+      ->propertyCondition('daystamp', $daystamp)
+      ->addMetaData('account', user_load(1)); // Run the query as user 1.
+    $result = $query->execute();
+
+    if (isset($result['data_jornadas'])) {
+      $ids = array_keys($result['data_jornadas']);
+      return entity_load('data_jornadas', $ids);
+    }
+
+}
+
+
+function get_personal_by_legajo($legajo){
+    $query = new EntityFieldQuery();
+
+
+    $query->entityCondition('entity_type', 'data_personal')
+      ->propertyCondition('legajo',$legajo)
+
+      ->addMetaData('account', user_load(1)); // Run the query as user 1.
+    $result = $query->execute();
+
+    if (isset($result['data_personal'])) {
+      $ids = array_keys($result['data_personal']);
+      $senior=entity_load('data_personal', $ids);
+      return array_shift($senior);
+    }
+
+}
+
+
+
+
+/**
+ * Theme callback for the form table.
+ */
+function theme_jornada_table(&$variables) {
+  $form = $variables['form'];
+  $header = $form['#header'];
+  $rows=$form;
+  $content = array(
+    '#theme' => 'table',
+    '#header' => $header,
+    '#rows' => array(),
+  );
+
+
+  foreach (element_children($rows) as $row_index) {
+
+    $row = array();
+    foreach (element_children($rows[$row_index]) as $delta=> $col_index) {
+      $row[$delta] = drupal_render($rows[$row_index][$col_index]);
+    }
+    $content['#rows'][] =array('data' => $row , 'class' => $rows[$row_index]['#class']);
+  }
+
+  return drupal_render($content);
+}
+
+
+function get_last_recurrencias_by_jid($jid, $pid=NULL){
+
+ 
+    $q=db_select('personal_jornada','p');
+    $q -> fields('p');
+    $q -> condition('jid',$jid);
+
+    $q -> condition('end_time',NULL,'is');
+    if($pid) $q->condition('pid',$pid);
+    $result=$q->execute();
+    return $result->fetchAllAssoc('pid');
+
+
+}
+
+function get_recurrencias_by_jid($jid,$pid){
+
+ 
+    $q=db_select('personal_jornada','p');
+    $q -> fields('p');
+    $q -> condition('jid',$jid);
+    $q -> condition('pid',$pid);
+ //   $q -> condition('end_time',0);
+    $result=$q->execute();
+    return $result->fetchAllAssoc('jpid');
+
+
+}
+
+
+function get_personal_activo(){
+
+    $query = new EntityFieldQuery();
+
+    $query->entityCondition('entity_type', 'data_personal')
+      ->propertyCondition('active', 1)
+      ->addMetaData('account', user_load(1)); // Run the query as user 1.
+
+    $result = $query->execute();
+
+    if (isset($result['data_personal'])) {
+      $ids = array_keys($result['data_personal']);
+      return entity_load('data_personal', $ids);
+    }
+
+}
+function get_personal_activo_por_jornada($jid,$key='pid'){
+
+    $q=db_select('personal_jornada','p');
+    $q -> fields('p');
+    $q -> condition('jid',$jid);
+    $result=$q->execute();
+    return $result->fetchAllAssoc($key);
+
+}
+
+function all_personal_by_legajo(){
+
+    $q=db_select('personal','p');
+    $q -> fields('p');
+    $result=$q->execute();
+    return $result->fetchAllAssoc('legajo');
+
+}
+function get_valores_for_time($time){
+  $return=array();
+  $query=db_select('valores_perido','p')->fields('p')->condition('start_time',$time,'<=')->condition('end_time',$time,'>=')->execute();
+  while ($result = $query->fetchObject()) {
+    $return[$result->grupo][$result->codigo]=$result->valor;
+
+  }
+  return $return;
+}
+
+function get_valores_by_time($start_time,$end_time){
+  $return=array();
+  $query=db_select('valores_perido','p')->fields('p')->condition('start_time',$start_time)->condition('end_time',$end_time)->execute();
+  while ($result = $query->fetchObject()) {
+    $return[$result->grupo][$result->codigo]=$result->valor;
+
+  }
+  return $return;
+}

@@ -1,0 +1,9 @@
+<?php
+
+/**
+ * Add Unic to jornadas.
+ */
+function jornadas_update_7001() {
+
+    db_add_unique_key('jornadas', 'unic', array('type','delta','start_time','end_time'));  
+}
