@@ -2,12 +2,12 @@
 
 function clock_bulk_import(){
 
-    $default_start=strtotime('1/2/2015 00:00:00');
+    $default_start=strtotime('2/1/2015 00:00:00');
     $start=variable_get('clock_last_time_import',$default_start);
- //   $start=$default_start;
+    $start=$default_start;
 
 
-    for ($i=$start; $i < $start + (100*UN_DIA); $i=$i+UN_DIA) { 
+    for ($i=$start; $i < $start + (160*UN_DIA); $i=$i+UN_DIA) { 
 
       $operations[]=array('process_clock_data',array(1,$i));
 
@@ -158,7 +158,7 @@ function call_clock($url,$query=array()){
                 'timeout' => 15,
                 'headers' => array('Content-Type' => 'application/json'),
         );
-  $request = drupal_http_request(variable_get('clock_server','http://192.168.1.45:5000/'  ). $url  , $options);
+  $request = drupal_http_request(variable_get('clock_server','http://192.168.1.109:5000/'  ). $url  , $options);
   return json_decode($request->data);
 
 }

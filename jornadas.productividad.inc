@@ -55,15 +55,27 @@ function batch_prod_finished(){
 
 function set_planta_personal_jornada($jid){
     db_query("DELETE FROM  planta_personal_jornada  WHERE jid=:jid ",array(':jid' => $jid));
-  $result=db_query("SELECT pid,work_type,planta , SUM(time_total) AS time_total
-                         FROM personal_jornada WHERE jid=:jid
-                        GROUP BY pid",array(':jid' => $jid));
 
     $jornada=array_shift(entity_load('data_jornadas',array($jid)));
     $valores=get_valores_for_time($jornada->start_time);
     $day_number=date('N',$timestamp);
 
+
     $ideal_time_work=$valores['horasdia'][$day_number] * 0.95;
+    db_query("INSERT INTO planta_personal_jornada (jid,pid,time_work,planta,ideal_time_work , work_type,numeric_work)
+                SELECT jid,pid , SUM(time_total) AS time_work ,planta, :ideal_time_work *3600 AS ideal_time_work , work_type,
+                CASE 
+                  WHEN SUM(time_total) /3600  > :ideal_time_work THEN 1 
+                  WHEN SUM(time_total) /3600  < :ideal_time_work AND SUM(time_total) /3600  > 4 THEN .5 
+                  ELSE 0
+                END AS numeric_work
+
+                FROM personal_jornada WHERE jid=:jid
+                GROUP BY pid", array(':jid'=>$jid, ':ideal_time_work'=>$ideal_time_work));
+
+  /*  $result=db_query("SELECT pid,work_type,planta , SUM(time_total) AS time_total
+                         FROM personal_jornada WHERE jid=:jid
+                        GROUP BY pid",array(':jid' => $jid));
     foreach ($result as $j) {
 
         $planta_personal_jornada=new stdClass();
@@ -86,12 +98,15 @@ function set_planta_personal_jornada($jid){
         drupal_write_record('planta_personal_jornada',$planta_personal_jornada);
 
 
-    }
+    }*/
 }
 function set_productividad_jornada_otros($jid){
     $jornada=array_shift(entity_load('data_jornadas',array($jid)));
+
     $valores=get_valores_for_time($jornada->start_time);
+
     $productividad_por_planta=db_select('planta_jornada_productividad','pp')->fields('pp',array('planta','monto'))->condition('jid',$jid)->execute()->fetchAllKeyed(0,1);
+
     $horas_por_planta=db_query("SELECT planta ,SUM(numeric_work) total
                                           FROM planta_personal_jornada 
                                           WHERE jid=:jid
@@ -100,8 +115,12 @@ function set_productividad_jornada_otros($jid){
                                           ",array(':jid' => $jid))->fetchAllKeyed(0,1);
     $valor_hora[1]=$productividad_por_planta[1]/$horas_por_planta[1];
     $valor_hora[2]=$productividad_por_planta[2]/$horas_por_planta[2];
-    $empleados=db_select('planta_personal_jornada','ppj')->fields('ppj')->condition('work_type',array('varios','acomodador'))
+ 
+  /*  $empleados=db_select('planta_personal_jornada','ppj')->fields('ppj')->condition('work_type',array('varios','acomodador'))
                 ->condition('jid',$jid)->execute();
+     echo "b5 " .(time() - $time) ."<br>";
+    $time=time();
+
     while ( $empleado = $empleados->fetchAssoc()) {
       $monto=$valor_hora[$empleado['planta']]*$empleado['numeric_work'];
 
@@ -118,9 +137,34 @@ function set_productividad_jornada_otros($jid){
                 "state"=>1,
                 "monto"=>$monto,
             )) -> execute();
+    echo "bx " .(time() - $time) ."<br>";
+    $time=time();
 
-    }
+    }*/
 
+
+    db_query("INSERT personal_jornada_productividad (jid,pid,tipo,cajas,cajas_eq,diff_cajas,diff_eq,coeff,state,monto)
+                  SELECT jid,pid,'resto',0,0,0,0,1,1,
+                  CASE planta  
+                    WHEN 1 THEN numeric_work*:valor_hora_1 
+                    WHEN 2 THEN numeric_work*:valor_hora_2 
+                    ELSE 0
+                  END 
+                  AS monto 
+                  FROM planta_personal_jornada 
+                  WHERE jid=:jid AND work_type IN ('varios','acomodador')", 
+                        array(':jid'=>$jid,':valor_hora_1'=>$valor_hora[1],':valor_hora_2'=>$valor_hora[2])
+              );
+
+    db_query("UPDATE 
+              planta_personal_jornada  ppj 
+              JOIN personal p ON p.pid=ppj.pid
+              JOIN jornadas j ON j.jid=ppj.jid
+              LEFT JOIN valores_perido vp ON (vp.grupo='categorias' AND  p.categoria=vp.codigo 
+                      AND j.start_time>=vp.start_time AND j.end_time<=vp.end_time)  
+              SET ppj.monto = vp.valor
+              WHERE ppj.jid=:jid
+              ",array(':jid'=>$jid));
 
 
 }
@@ -164,7 +208,9 @@ function productividad_import_day($jid){
     
     productividad_import_jid($jid);
     productividad_planta_import_jid($jid);
-    $table=array();
+    set_planta_personal_jornada($jid);
+    set_productividad_jornada_otros($jid);
+      $table=array();
     $rows=db_select('personal_jornada_productividad','jp')->fields('jp')->condition('jid',$jid)->execute();
     while ( $r = $rows->fetchAssoc()) {
         if(!@$table['header'])$table['header']=array_keys($r);
@@ -183,6 +229,7 @@ function productividad_import_day($jid){
     $return.= theme('table',$table);
     return $return;
 }
+
 
 function productividad_import_jid($jid){
 
@@ -446,7 +493,7 @@ function detalle_embalador($jid,$pid){
     $tt=0;
     while ( $item = $result->fetchObject()){
 
-        $table['rows'][]=array(format_date($item->start_time,'custom','h:i'),format_date($item->end_time,'custom','h:i'),$item->work_type,$item->planta,format_interval($item->time_total));
+        $table['rows'][]=array(format_date($item->start_time,'custom','G:i'),format_date($item->end_time,'custom','G:i'),$item->work_type,$item->planta,format_interval($item->time_total));
         $tt=$tt+$item->time_total;
     }
         $table['rows'][]=array('','','','Total',format_interval($tt));
@@ -459,8 +506,8 @@ function detalle_embalador($jid,$pid){
 
     $result=db_query("SELECT
           `env`.`ESPECIE`  AS  especie,
-        concat(HOUR(MIN(INGRESO)),':',MINUTE(MIN(INGRESO))) AS primer, 
-        concat(HOUR(MAX(INGRESO)),':',MINUTE(MAX(INGRESO))) AS ultima, 
+        concat(HOUR(MIN(INGRESO)),':',lpad(MINUTE(MAX(INGRESO)),2,'0')) AS primer, 
+        concat(HOUR(MAX(INGRESO)),':',lpad(MINUTE(MAX(INGRESO)),2,'0')) AS ultima, 
 
         env.nombre AS envase,
         emb.nombre AS embalado,

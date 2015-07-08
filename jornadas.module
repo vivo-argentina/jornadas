@@ -25,6 +25,18 @@ function jornadas_init(){
   die();*/
 }
 function jornadas_menu() {
+
+
+  $items['productividad_realtime'] = array(
+    'title' => 'Productividad',
+    'page callback' => 'productividad_realtime',
+    'page arguments' => array(),
+    'access arguments' => array('admin jornadas'),
+    'file' => 'jornadas.realtime.inc',
+
+  );
+
+
   $items['admin/structure/create_recurrences_by_month'] = array(
     'title' => 'Crear recurrencias de jornada',
     'page callback' => 'create_recurrences_by_month',
@@ -46,6 +58,18 @@ function jornadas_menu() {
     'access arguments' => array('admin personal'),
   );
 
+
+$items['jornadas'] = array(
+    'title' => 'Operaciones',
+    'page callback' => 'list_operaciones',
+    'page arguments' => array(2),
+    'access arguments' => array('admin personal'),
+    'menu_name' => 'main-menu',
+    'type' => MENU_NORMAL_ITEM,
+
+  );
+
+
 $items['jornadas/set_planta/%'] = array(
     'title' => 'jornadas',
     'page callback' => 'set_planta_now',
@@ -55,11 +79,13 @@ $items['jornadas/set_planta/%'] = array(
   );
 
   $items['jornadas/clock/import_personal'] = array(
-    'title' => 'jornadas',
+    'title' => 'Importar personal del rejoj',
     'page callback' => 'clock_import_personal',
     'page arguments' => array(''),
     'file' => 'jornadas.clock.inc',
     'access arguments' => array('admin personal'),
+     'menu_name' => 'main-menu',
+    'type' => MENU_NORMAL_ITEM,
   );
 
 
@@ -84,12 +110,14 @@ $items['jornadas/set_planta/%'] = array(
       'access arguments' => array('admin personal'),
       'file' => 'jornadas.productividad.inc',
   );
-$items['jornadas/productividad/procesar'] = array(
-      'title' => 'Presentes',
+$items['jornadas/productividad_procesar'] = array(
+      'title' => 'Calcular productividad',
       'page callback' => 'drupal_get_form',
       'page arguments' => array('bulk_process_poductividad',3),
       'access arguments' => array('admin personal'),
       'file' => 'jornadas.productividad.inc',
+      'menu_name' => 'main-menu',
+      'type' => MENU_NORMAL_ITEM,
   );
 $items['jornadas/productividad/ajuste/%/%'] = array(
       'title' => 'Presentes',
@@ -112,6 +140,8 @@ $items['jornadas/valores'] = array(
       'page arguments' => array(),
       'access arguments' => array('admin personal'),
       'file' => 'jornadas.valores.inc',
+      'menu_name' => 'main-menu',
+      'type' => MENU_NORMAL_ITEM,
   );
    
 $items['jornadas/valores/perido/%/%'] = array(
@@ -121,6 +151,17 @@ $items['jornadas/valores/perido/%/%'] = array(
       'access arguments' => array('admin personal'),
       'file' => 'jornadas.valores.inc',
   );
+
+$items['jornadas/resumen'] = array(
+      'title' => 'Resumen por mes',
+      'page callback' => 'lista_meses',
+      'page arguments' => array(2,3),
+      'access arguments' => array('admin personal'),
+      'file' => 'jornadas.liquidaciones.inc',
+      'menu_name' => 'main-menu',
+      'type' => MENU_NORMAL_ITEM,
+  );
+
 
 $items['jornadas/resumen/%/%'] = array(
       'title' => 'Valores por periodo',
@@ -216,6 +257,19 @@ function jornadas_action_info() {
 
   );
 }
+
+function get_categorias_empleados(){
+  return array('Armadora cajas','Autoelevadorista','Clasificadora','Embalador 1ra.','Mec. Mantenimiento','Operadora Comp.','P.T. Varios','Peón Vs. Especial','Puntera Clasif.','Sacador / Estibador','Sellador riel','Tapador a mano','Contratado','Maquinista ','Autoelevadorista');
+}
+
+
+function list_operaciones(){
+
+$menu = menu_navigation_links('main-menu',1);
+return theme('links__main-menu', array('links' => $menu));
+    
+
+}
 function jornadas_recurrecia_set_empacador( &$entity, $context ){
     $entity->work_type='empacador';
 }
@@ -248,6 +302,11 @@ function jornadas_recurrecia_delete_action( &$entity, $context ){
 
 function personal_jornada_edit($form, &$from_state,$jpid){
 
+  if(!$from_state['des']){
+    $from_state['des']=$_SERVER[ 'HTTP_REFERER'];
+  }
+    $_GET['destination'] = $from_state['des'];
+
   $recurrencia=jornadas_personal_jornada_load($jpid);
   $pid=array_shift(entity_load('data_personal',array($recurrencia->pid)));
   $jid=array_shift(entity_load('data_jornadas',array($recurrencia->jid)));
@@ -256,10 +315,10 @@ function personal_jornada_edit($form, &$from_state,$jpid){
   $form['pid']=array('#value'=>$recurrencia->pid,'#type'=>'value');
   $form['jid']=array('#value'=>$jid,'#type'=>'value');
 
-  $form['work_type']=array('#type' =>'select','#options' => array('Empacador'=>'Empacador','Acomodador'=>'Acomodador','Varios'=>'varios'),'#default_value'=>$recurrencia->work_type);
-  $form['start_time']=array('#type' =>'textfield','#size'=>6,'#default_value'=>date("H:i",$recurrencia->start_time) );
-  $form['end_time']=array('#type' =>'textfield','#size'=>6,'#default_value'=>date("H:i",$recurrencia->end_time) );
-  $form['planta']=array('#type' =>'select' ,'#options' => array(1=>'Planta 1',2=>'Planta 2'),'#default_value'=>$recurrencia->planta);
+  $form['work_type']=array('#type' =>'select','#options' => array('Empacador'=>'Empacador','Acomodador'=>'Acomodador','Varios'=>'varios'),'#default_value'=>$recurrencia->work_type ,'#title'=>'Tipo de tarea');
+  $form['start_time']=array('#type' =>'textfield','#size'=>6,'#default_value'=>date("H:i",$recurrencia->start_time) ,'#title'=>'ingreso');
+  $form['end_time']=array('#type' =>'textfield','#size'=>6,'#default_value'=>date("H:i",$recurrencia->end_time) ,'#title'=>'salida');
+  $form['planta']=array('#type' =>'select' ,'#options' => array(1=>'Planta 1',2=>'Planta 2'),'#default_value'=>$recurrencia->planta,'#title'=>'Planta');
 
   $form['submit'] = array('#type' => 'submit', '#value' => t('ok'));
   return $form;

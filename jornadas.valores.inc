@@ -49,10 +49,33 @@ function valores_jornada($form,&$form_state,$start_time,$end_time){
     );
 
 
+
+
     }
+
+    $categorias=get_categorias_empleados();
+
+    $form['categorias'] = array(
+      '#type' => 'fieldset', 
+      '#title' => 'Categorias', 
+      '#tree' => true, 
+    );
+
+    foreach ($categorias as $value) {
+        $form['categorias'][$value] = array(
+          '#type' => 'textfield', 
+          '#title' => $value, 
+          '#default_value' =>($valores['categorias'][$value])?$valores['categorias'][$value]:0, 
+          '#size' => 8, 
+          '#maxlength' => 8, 
+          '#required' => TRUE,
+
+          );
+    }
+
     $form['montos'] = array(
       '#type' => 'fieldset', 
-      '#title' => t('MOntos productividad'), 
+      '#title' => t('Montos productividad'), 
       '#tree' => true, 
     );
 
@@ -127,6 +150,18 @@ function valores_jornada_submit($form,&$form_state){
             'grupo'=>'horasdia',
             'codigo' => $value,
             'valor' => $form_state['values']['horasdia'][$key],
+            'start_time' => $form_state['values']['start_time'],
+            'end_time' => $form_state['values']['end_time']
+
+        )) ->execute();
+    }    
+
+    $categorias=get_categorias_empleados();
+    foreach ($categorias as $value) {
+        db_insert('valores_perido')->fields(array(
+            'grupo'=>'categorias',
+            'codigo' => $value,
+            'valor' => $form_state['values']['categorias'][$value],
             'start_time' => $form_state['values']['start_time'],
             'end_time' => $form_state['values']['end_time']
 
