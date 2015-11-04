@@ -10,7 +10,9 @@ function lista_meses(){
         $i++;
         $table['rows'][]=array($i,l($jornada ->mes . "/".$jornada ->anio , "jornadas/resumen/{$jornada ->mes}/{$jornada ->anio}"));  
     }
-    return theme('table',$table);
+    if($_GET['csv']) theme('table_csv',$table);
+
+    return theme('table',$table) . theme('link_csv');
 
 }
 
@@ -42,7 +44,9 @@ function personal_mensual($month,$year=2015){
             );  
     }
     $table['header']=array('N','Nombre','Dias','Jornadas','tiempo','productividad','sueldo','total');
-    return theme('table',$table);
+    if($_GET['csv']) theme('table_csv',$table);
+
+    return theme('table',$table) .  theme('link_csv');
 
 }
 function personal_resumen_mensual($month,$year,$pid){
@@ -78,7 +82,9 @@ function personal_resumen_mensual($month,$year,$pid){
     $table['rows'][]=array('','','','','',number_format($productividad,2,',','.'),number_format($sueldo,2,',','.'),number_format($productividad+$sueldo,2,',','.'));  
 
     $table['header']=array('N','Dia','tarea','Jornadas','tiempo','monto','sueldo','total');
-    return theme('table',$table);
+    if($_GET['csv']) theme('table_csv',$table);
+
+    return theme('table',$table) .  theme('link_csv');
     
 
 }

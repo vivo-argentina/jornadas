@@ -8,6 +8,7 @@ define('UN_DIA',86400);
 define('SIETE_DIAS',604800);
 
 include ('jornadas.test.inc');
+include ('jornadas.entity.inc');
 function jornadas_init(){
 
   module_load_include('inc', 'jornadas', 'jornadas.clock');
@@ -68,6 +69,16 @@ $items['jornadas'] = array(
     'type' => MENU_NORMAL_ITEM,
 
   );
+$items['jornadas/set_time_prod/%'] = array(
+    'title' => 'Operaciones',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('jornadas_production_time',2),
+    'access arguments' => array('admin personal'),
+    'menu_name' => 'main-menu',
+    'type' => MENU_NORMAL_ITEM,
+
+  );
+
 
 
 $items['jornadas/set_planta/%'] = array(
@@ -185,7 +196,12 @@ $items['jornadas/resumen/%/%/%'] = array(
 }
 
 
-
+function jornadas_views_api() {
+  return array(
+    'api' => 3,
+    'path' => drupal_get_path('module', 'jornadas') . 'views',
+  );
+}
 
 
 
@@ -256,6 +272,43 @@ function jornadas_action_info() {
 
 
   );
+}
+
+function jornadas_production_time($form,&$form_state,$jid){
+
+  $jornada=array_shift(entity_load('data_jornadas',array($jid)));
+  drupal_set_title("Horas de produccion en la jornada: ". format_date($jornada->start_time));
+  $form_state['jornada']=$jornada;
+  $form['p1'] = array('#type' => 'fieldset', '#title' => 'planta 1','#tree'=>true);
+  $form['p1']['manzana']=array('#type' =>'textfield','#size'=>6,'#default_value'=>gmdate("H:i", $jornada->production_time[1][1]) ,'#title'=>'Manzanas');
+  $form['p1']['Pera']=array('#type' =>'textfield','#size'=>6,'#default_value'=>gmdate("H:i", $jornada->production_time[1][2]) ,'#title'=>'Peras');
+  $form['p2'] = array('#type' => 'fieldset', '#title' => 'planta 2','#tree'=>true);
+  $form['p2']['manzana']=array('#type' =>'textfield','#size'=>6,'#default_value'=>gmdate("H:i", $jornada->production_time[2][1]) ,'#title'=>'Manzanas');
+  $form['p2']['Pera']=array('#type' =>'textfield','#size'=>6,'#default_value'=>gmdate("H:i", $jornada->production_time[2][2]) ,'#title'=>'Peras');
+$form['submit'] = array('#type' => 'submit', '#value' => t('enviar'));
+  return $form;
+}
+function jornadas_production_time_validate($form,&$form_state){
+  $form_state['values']['p1']['manzana']=hour_string_to_sec($form_state['values']['p1']['manzana']);
+  $form_state['values']['p1']['Pera']=hour_string_to_sec($form_state['values']['p1']['Pera']);
+  $form_state['values']['p2']['manzana']=hour_string_to_sec($form_state['values']['p2']['manzana']);
+  $form_state['values']['p2']['Pera']=hour_string_to_sec($form_state['values']['p2']['Pera']);
+
+}
+
+function hour_string_to_sec($string){
+  $parsed = date_parse($string);
+  return $parsed['hour'] * 3600 + $parsed['minute'] * 60 ;
+  
+}
+
+function jornadas_production_time_submit($form,&$form_state){
+  $jornada=$form_state['jornada'];
+  $jornada->production_time[1][1]=$form_state['values']['p1']['manzana'];
+  $jornada->production_time[1][2]=$form_state['values']['p1']['Pera'];
+  $jornada->production_time[2][1]=$form_state['values']['p2']['manzana'];
+  $jornada->production_time[2][2]=$form_state['values']['p2']['Pera'];
+  entity_save('data_jornadas',$jornada);
 }
 
 function get_categorias_empleados(){
@@ -370,6 +423,13 @@ function jornadas_theme() {
     'jornada_table' => array(
       // The renderable element is the form.
       'render element' => 'form',
+    ),
+    'table_csv' => array(
+      'variables' => array('variables' => NULL),
+    ),
+
+    'link_csv' => array(
+      'variables' => array('table' => '1'),
     ),
 
   );
@@ -741,4 +801,79 @@ function get_valores_by_time($start_time,$end_time){
 
   }
   return $return;
+}
+
+
+function theme_table_csv($variables) {
+  header("Cache-Control: public");
+  header("Content-Type: application/vnd.ms-excel");
+  header("Cache-Control: no-store, no-cache, must-revalidate");
+  header("Cache-Control: post-check=0, pre-check=0");
+  header("Content-Disposition: attachment; filename=\"export.csv\";" );
+  header("Content-Transfer-Encoding: binary");
+
+  $fp = fopen('php://output', 'w');
+
+
+
+  $header = $variables['header'];
+  $rows = $variables['rows'];
+  $attributes = $variables['attributes'];
+  $caption = $variables['caption'];
+  $colgroups = $variables['colgroups'];
+  $sticky = $variables['sticky'];
+  $empty = $variables['empty'];
+
+
+
+  if (isset($caption)) {
+    fputcsv($fp, array($caption));
+  }
+  
+
+
+
+
+
+  // Add the 'empty' row message if available.
+  if (!count($rows) && $empty) {
+    fputcsv($fp, array($empty));
+  }
+
+  // Format the table header:
+  if (count($header)) {
+      fputcsv($fp, $header);
+  }
+
+  // Format the table rows:
+  if (count($rows)) {
+
+    foreach ($rows as $number => $row) {
+      // Check if we're dealing with a simple or complex row
+      if (isset($row['data'])) {
+        $cells = $row['data'];
+      }
+      else {
+        $cells = $row;
+      }
+      if (count($cells)) {
+        array_walk($cells,'clean_cell');
+        fputcsv($fp, $cells);
+
+
+      }
+    }
+  }
+
+  fclose($fp);
+  drupal_exit();
+
+}
+
+function clean_cell(&$cell){
+  $cell=strip_tags($cell);
+}
+
+function theme_link_csv($variable){
+  return l('Exportar a Excel',join('/',arg()),array('query' => drupal_get_query_parameters() +  array('csv' => $variable['table']) ) );
 }

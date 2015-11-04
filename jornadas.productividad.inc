@@ -229,14 +229,27 @@ function productividad_import_day($jid){
     $return.= theme('table',$table);
     return $return;
 }
+function calcular_producion($horas_reales,$horas_esperadas,$prod_esperada){
 
+  if($horas_reales>=$horas_esperadas || $horas_reales==0) return $prod_esperada;
+  return ($prod_esperada*$horas_reales)/$horas_esperadas;
+}
 
 function productividad_import_jid($jid){
 
 
     $jornada=array_shift(entity_load('data_jornadas',array($jid)));
+    $day_number=date('N',$jornada->start_time);
+
     $coefficiene_ajustes=coefficientes_ajuste_jornada($jid);
     $valores=get_valores_for_time($jornada->start_time);
+
+
+    $producion_esperada=array();
+    $producion_esperada[1][1]=calcular_producion($jornada->production_time[1][1],$valores['horasdia'][$day_number]*UNA_HORA,$valores['volumenes']['mnz']);
+    $producion_esperada[1][2]=calcular_producion($jornada->production_time[1][2],$valores['horasdia'][$day_number]*UNA_HORA,$valores['volumenes']['mnz']);
+    $producion_esperada[2][1]=calcular_producion($jornada->production_time[2][1],$valores['horasdia'][$day_number]*UNA_HORA,$valores['volumenes']['pera']);
+    $producion_esperada[2][2]=calcular_producion($jornada->production_time[2][2],$valores['horasdia'][$day_number]*UNA_HORA,$valores['volumenes']['pera']);
 
     $prod_pera=$valores['volumenes']['pera'];
     $prod_mzn=$valores['volumenes']['mnz'];
@@ -246,31 +259,31 @@ function productividad_import_jid($jid){
     
 
     $result=db_query("SELECT
-          `env`.`ESPECIE`  AS  especie,
+          env.ESPECIE  AS  especie,
         DATE(INGRESO) AS dia, 
-          `e`.`LEGAJO`    AS legajo,
-          `e`.`NOMBRE`    AS nombre,
+          e.LEGAJO    AS legajo,
+          e.NOMBRE    AS nombre,
 
-          SUM(`emb`.`EQ`)      AS cajas,
-          SUM(`emb`.`EQ` * `env`.`EQ`) AS cajas_eq,
-          IF(max(`env`.`ESPECIE`) =1, {$prod_mzn},{$prod_pera}) AS prod_esperada,
-          (SUM(`emb`.`EQ` ) - IF(`env`.`ESPECIE` =1, {$prod_mzn},{$prod_pera})) AS diff_cajas,
-          (SUM(`emb`.`EQ` * `env`.`EQ`) - IF(`env`.`ESPECIE` =1, {$prod_mzn},{$prod_pera})) * AVG(`env`.`EQ`) AS diff_eq,
-           
-          `e`.`TURNO`     AS `turno`,
-          `c`.`LINEA`     AS `linea`
-        FROM (((`fruitid`.`cajas` `c`
-             JOIN `fruitid`.`embaladores` `e`
-               ON ((`e`.`EMBALADOR` = `c`.`EMBALADOR`)))
-            JOIN `fruitid`.`envases` `env`
-              ON ((`c`.`ENVASE` = `env`.`ENVASE`)))
-           JOIN `fruitid`.`embalados` `emb`
-             ON ((`c`.`EMBALADO` = `emb`.`EMBALADO`)))
-        WHERE ((`c`.`EMPRESA` = 1)
-               AND (`c`.`PALLET` >= 0))
+          SUM(emb.EQ)      AS cajas,
+          SUM(emb.EQ * env.EQ) AS cajas_eq,
+          /*IF(max(env.ESPECIE) =1, {$prod_mzn},{$prod_pera}) AS prod_esperada,
+          (SUM(emb.EQ ) - IF(env.ESPECIE =1, {$prod_mzn},{$prod_pera})) AS diff_cajas,
+          (SUM(emb.EQ * env.EQ) - IF(env.ESPECIE =1, {$prod_mzn},{$prod_pera})) * AVG(env.EQ) AS diff_eq,
+           */
+          e.TURNO     AS turno,
+          c.LINEA     AS linea
+        FROM (((fruitid.cajas c
+             JOIN fruitid.embaladores e
+               ON ((e.EMBALADOR = c.EMBALADOR)))
+            JOIN fruitid.envases env
+              ON ((c.ENVASE = env.ENVASE)))
+           JOIN fruitid.embalados emb
+             ON ((c.EMBALADO = emb.EMBALADO)))
+        WHERE ((c.EMPRESA = 1)
+               AND (c.PALLET >= 0))
         AND DATE(INGRESO)='".$date_string."'
-         GROUP BY DATE(INGRESO), e.EMBALADOR ");
-// quito el , `env`.`ESPECIE`
+         GROUP BY DATE(INGRESO), e.EMBALADOR ,env.ESPECIE");
+// quito el , 
     $procesados=array();
     db_delete('personal_jornada_productividad')->condition('jid',$jornada->jid)->execute();
     foreach ($result as $item){
@@ -285,53 +298,47 @@ function productividad_import_jid($jid){
         $ajuste=(@$coefficiene_ajustes[$personal[$item->legajo]->pid])?$coefficiene_ajustes[$personal[$item->legajo]->pid]:1;
 
         if(!isset($procesados[$item->legajo])){
-            
-            if($ajuste!=1){
-                $diff=$item->cajas_eq + $item->cajas_eq *$ajuste;
-                echo $diff;
-                $monto=($diff>$item->prod_esperada)?($item->prod_esperada-$item->cajas_eq)*$valores['montos']['porcaja']:0;                
 
+            $cajas_esperadas=$producion_esperada[$item->linea][$item->especie];
+            $diff_eq= $item->cajas_eq -$cajas_esperadas;
+            $diff_cajas= $item->cajas -$cajas_esperadas;
 
-            } else {
-                $monto=($item->diff_eq>0)?$item->diff_eq*$valores['montos']['porcaja']:0;
-            }
-            $procesados[$item->legajo]=$item;
+            if($ajuste!=1) $diff_eq=$item->cajas_eq + $item->cajas_eq *$ajuste;
 
-            db_insert('personal_jornada_productividad')->
-                fields(array(
+            $monto=($diff_eq>0)?$diff_eq*$valores['montos']['porcaja']:0;
+            $procesados[$item->legajo]=array(
                         "jid"=>$jornada->jid,
                         "pid"=>$personal[$item->legajo]->pid,
                         "tipo"=>'embalador',
                         "cajas"=>$item->cajas,
                         "cajas_eq"=>$item->cajas_eq,
-                        "diff_cajas"=>$item->diff_cajas,
-                        "diff_eq"=>$item->diff_eq,
+                        "diff_cajas"=>$diff_cajas,
+                        "diff_eq"=>$diff_eq,
                         "coeff"=>$ajuste,
                         "state"=>1,
                         "monto"=>$monto,
-                    )) -> execute();
+                    );
+
+
            db_update('personal_jornada')->fields(array('work_type' =>'Embalador' ,'planta' =>$item->linea ))->condition('jid',$jornada->jid)->condition('pid',$personal[$item->legajo]->pid)->condition('work_type','nn')->execute();
 
         } else{
+            $procesados[$item->legajo]["cajas"]+=$item->cajas;
+            $procesados[$item->legajo]["cajas_eq"]+=$item->cajas_eq;
+            $procesados[$item->legajo]["diff_cajas"]+=$item->diff_cajas;
+            $procesados[$item->legajo]["diff_eq"]+=$item->diff_eq;
+            $procesados[$item->legajo]["monto"]+=$monto;
 
-/*
-            $total=$item->cajas+$procesados[$item->legajo]->cajas;
-            $primer_especie_porcentaje=($procesados[$item->legajo]->cajas*1)/$total;
-            $segunda_especie_porcentaje=($item->cajas*1)/$total;
-            $item->prod_esperada=($item->prod_esperada * 1
-            //$item->cajas_eq+=$procesados[$item->legajo]->cajas_eq;
-            //$total-> 100
-            //$to
-            
-            $item->cajas+=$procesados[$item->legajo]->cajas;            
-            $item->cajas_eq+=$procesados[$item->legajo]->cajas_eq;*/            
-            drupal_set_message("El Legajo {$item->legajo} Tiene varias especies ",'error');
+           drupal_set_message("El Legajo {$item->legajo} Tiene varias especies ");
 
-            $procesados[$item->legajo]=$item;
 
         }
 
+
     
+    }
+    foreach ($procesados as $legajo => $fields) {
+          db_insert('personal_jornada_productividad')->fields($fields) -> execute();
     }
 
     
@@ -347,7 +354,9 @@ function productividad_planta_import_jid($jid){
 
 
     $date_string=format_date($jornada->start_time,'custom','Y-m-d');
-    
+    #to-do: contar los emaladores reales por planta
+
+
     $result=db_query("SELECT
           `env`.`ESPECIE`  AS  especie,
         DATE(INGRESO) AS dia, 

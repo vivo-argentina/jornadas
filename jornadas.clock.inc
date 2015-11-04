@@ -4,7 +4,6 @@ function clock_bulk_import(){
 
     $default_start=strtotime('2/1/2015 00:00:00');
     $start=variable_get('clock_last_time_import',$default_start);
-    $start=$default_start;
 
 
     for ($i=$start; $i < $start + (160*UN_DIA); $i=$i+UN_DIA) { 
