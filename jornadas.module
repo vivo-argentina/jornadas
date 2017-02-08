@@ -677,6 +677,7 @@ function get_personal_by_legajo($legajo){
 
     $query->entityCondition('entity_type', 'data_personal')
       ->propertyCondition('legajo',$legajo)
+      ->propertyCondition('active',1)
 
       ->addMetaData('account', user_load(1)); // Run the query as user 1.
     $result = $query->execute();
