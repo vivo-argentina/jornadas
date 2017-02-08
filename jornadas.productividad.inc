@@ -61,17 +61,21 @@ function set_planta_personal_jornada($jid){
     $day_number=date('N',$timestamp);
 
 
-    $ideal_time_work=$valores['horasdia'][$day_number] * 0.95;
-    db_query("INSERT INTO planta_personal_jornada (jid,pid,time_work,planta,ideal_time_work , work_type,numeric_work)
+    $ideal_time_work=$valores['horasdia'][$day_number] * 0.90;
+    db_query("INSERT INTO planta_personal_jornada (jid,pid,time_work,planta,ideal_time_work , work_type,numeric_work,time_extra)
                 SELECT jid,pid , SUM(time_total) AS time_work ,planta, :ideal_time_work *3600 AS ideal_time_work , work_type,
                 CASE 
                   WHEN SUM(time_total) /3600  > :ideal_time_work THEN 1 
                   WHEN SUM(time_total) /3600  < :ideal_time_work AND SUM(time_total) /3600  > 4 THEN .5 
                   ELSE 0
-                END AS numeric_work
+                END AS numeric_work,
+                CASE 
+                  WHEN SUM(time_total) - (:horas_reales*3600) > 0 THEN SUM(time_total) - (:horas_reales*3600)
+                  ELSE 0
+                 END as time_extra
 
                 FROM personal_jornada WHERE jid=:jid
-                GROUP BY pid", array(':jid'=>$jid, ':ideal_time_work'=>$ideal_time_work));
+                GROUP BY pid", array(':jid'=>$jid, ':ideal_time_work'=>$ideal_time_work,':horas_reales' => $valores['horasdia'][$day_number]));
 
   /*  $result=db_query("SELECT pid,work_type,planta , SUM(time_total) AS time_total
                          FROM personal_jornada WHERE jid=:jid
@@ -101,49 +105,73 @@ function set_planta_personal_jornada($jid){
     }*/
 }
 function set_productividad_jornada_otros($jid){
+
+
+    //Obtengo los datos de la jornada
     $jornada=array_shift(entity_load('data_jornadas',array($jid)));
 
+    //Obtengo los datos de la valors
     $valores=get_valores_for_time($jornada->start_time);
 
-    $productividad_por_planta=db_select('planta_jornada_productividad','pp')->fields('pp',array('planta','monto'))->condition('jid',$jid)->execute()->fetchAllKeyed(0,1);
+    $productividad_total_en_cajas=db_query("SELECT SUM(diff_eq) AS cajas
+                    FROM personal_jornada_productividad
+                    WHERE jid =:jid
+                    AND diff_eq > 0"
+                    ,array(':jid' => $jid))->fetchField();
+    $jornadas_trabajadas=db_query("SELECT SUM(numeric_work) AS total
+                    FROM planta_personal_jornada 
+                    WHERE jid=:jid
+                    AND work_type IN ('varios','acomodador')"
+                    ,array(':jid' => $jid))->fetchField();
+
+    $valor_jornada_trabajada=($productividad_total_en_cajas/$jornadas_trabajadas) * $valores['montos']['porcajaresto'];
+    $personal_total=db_query("SELECT pid, numeric_work 
+                      FROM planta_personal_jornada 
+                      WHERE jid=:jid AND work_type IN ('varios','acomodador')"
+                    ,array(':jid' => $jid));
+
+
+    while ($personal = $personal_total->fetchObject()) {
+        //uso insert ignore para evitar errores
+        $valor_a_cobrar=$personal->numeric_work * $valor_jornada_trabajada;
+        db_query("insert ignore 
+                    personal_jornada_productividad (jid,pid,tipo,cajas,cajas_eq,diff_cajas,diff_eq,coeff,state,monto) 
+                    values (:jid,:pid,'resto',0,0,0,0,1,1,:valor_a_cobrar)",
+                    array(":jid"=> $jid, ":pid" => $personal->pid , ':valor_a_cobrar'  => $valor_a_cobrar));
+    }
+
+
+}
+function _old_set_productividad_jornada_otros($jid){
+
+    //Obtengo los datos de la jornada
+    $jornada=array_shift(entity_load('data_jornadas',array($jid)));
+
+    //Obtengo los datos de la valors
+    $valores=get_valores_for_time($jornada->start_time);
+
+
+    $productividad_por_planta=db_select('planta_jornada_productividad','pp')->fields('pp',array('planta','monto'))
+        ->condition('jid',$jid)->execute()->fetchAllKeyed(0,1);
 
     $horas_por_planta=db_query("SELECT planta ,SUM(numeric_work) total
                                           FROM planta_personal_jornada 
                                           WHERE jid=:jid
-                                          AND work_type IN ('varios','acomodador')
-                                          GROUP BY planta
+                                          AND work_type IN ('varios','acomodador','nn')
+                                           GROUP BY planta
                                           ",array(':jid' => $jid))->fetchAllKeyed(0,1);
+                                          
     $valor_hora[1]=$productividad_por_planta[1]/$horas_por_planta[1];
     $valor_hora[2]=$productividad_por_planta[2]/$horas_por_planta[2];
  
-  /*  $empleados=db_select('planta_personal_jornada','ppj')->fields('ppj')->condition('work_type',array('varios','acomodador'))
-                ->condition('jid',$jid)->execute();
-     echo "b5 " .(time() - $time) ."<br>";
-    $time=time();
-
-    while ( $empleado = $empleados->fetchAssoc()) {
-      $monto=$valor_hora[$empleado['planta']]*$empleado['numeric_work'];
-
-      db_insert('personal_jornada_productividad')->
-        fields(array(
-                "jid"=>$jid,
-                "pid"=>$empleado['pid'],
-                "tipo"=>'resto',
-                "cajas"=>0,
-                "cajas_eq"=>0,
-                "diff_cajas"=>0,
-                "diff_eq"=>0,
-                "coeff"=>1,
-                "state"=>1,
-                "monto"=>$monto,
-            )) -> execute();
-    echo "bx " .(time() - $time) ."<br>";
-    $time=time();
-
-    }*/
 
 
-    db_query("INSERT personal_jornada_productividad (jid,pid,tipo,cajas,cajas_eq,diff_cajas,diff_eq,coeff,state,monto)
+    $valor_hora_unificado=($productividad_por_planta[1] + $productividad_por_planta[2])/($horas_por_planta[1]+$horas_por_planta[2]+$horas_por_planta[0]);
+
+  /* 
+  ATENCION
+    Esto lo comento porque unificamos a productividad de las dos plantas  
+   db_query("INSERT personal_jornada_productividad (jid,pid,tipo,cajas,cajas_eq,diff_cajas,diff_eq,coeff,state,monto)
                   SELECT jid,pid,'resto',0,0,0,0,1,1,
                   CASE planta  
                     WHEN 1 THEN numeric_work*:valor_hora_1 
@@ -154,6 +182,17 @@ function set_productividad_jornada_otros($jid){
                   FROM planta_personal_jornada 
                   WHERE jid=:jid AND work_type IN ('varios','acomodador')", 
                         array(':jid'=>$jid,':valor_hora_1'=>$valor_hora[1],':valor_hora_2'=>$valor_hora[2])
+              );
+*/
+
+
+    db_query("INSERT personal_jornada_productividad (jid,pid,tipo,cajas,cajas_eq,diff_cajas,diff_eq,coeff,state,monto)
+                  SELECT jid,pid,'resto',0,0,0,0,1,1,
+                       numeric_work*:valor_hora_unificado 
+                  AS monto 
+                  FROM planta_personal_jornada 
+                  WHERE jid=:jid AND work_type IN ('varios','acomodador','nn')", 
+                        array(':jid'=>$jid,':valor_hora_unificado'=>$valor_hora_unificado)
               );
 
     db_query("UPDATE 
@@ -167,7 +206,81 @@ function set_productividad_jornada_otros($jid){
               ",array(':jid'=>$jid));
 
 
+
 }
+
+/*function set_productividad_jornada_otros($jid){
+
+    //Obtengo los datos de la jornada
+    $jornada=array_shift(entity_load('data_jornadas',array($jid)));
+    //Obtengo los datos de la valors
+    $valores=get_valores_for_time($jornada->start_time);
+
+    $productividad_por_planta=db_select('planta_jornada_productividad','pp')->fields('pp',array('planta','monto'))
+        ->condition('jid',$jid)->execute()->fetchAllKeyed(0,1);
+
+
+    $horas_por_planta=db_query("SELECT planta ,SUM(numeric_work) total
+                                          FROM planta_personal_jornada 
+                                          WHERE jid=:jid
+                                          AND work_type IN ('varios','acomodador')
+                                           GROUP BY planta
+                                          ",array(':jid' => $jid))->fetchAllKeyed(0,1);
+
+
+    $valor_hora[1]=$productividad_por_planta[1]/$horas_por_planta[1];
+    $valor_hora[2]=$productividad_por_planta[2]/$horas_por_planta[2];
+
+    if($valor_hora[1] == Null) $valor_hora[1]=0;
+    if($valor_hora[2] == Null) $valor_hora[2]=0;
+    #$valor_hora_unificado=($productividad_por_planta[1] + $productividad_por_planta[2])/($horas_por_planta[1]+$horas_por_planta[2]+$horas_por_planta[0]);
+
+
+
+   db_query("INSERT  personal_jornada_productividad (jid,pid,tipo,cajas,cajas_eq,diff_cajas,diff_eq,coeff,state,monto)
+                  SELECT jid,pid,'resto',0,0,0,0,1,1,
+                  CASE planta  
+                    WHEN 1 THEN numeric_work*:valor_hora_1 
+                    WHEN 2 THEN numeric_work*:valor_hora_2 
+                    ELSE 0
+                  END 
+                  AS monto 
+                  FROM planta_personal_jornada 
+                  WHERE jid=:jid AND work_type IN ('varios','acomodador')", 
+                        array(':jid'=>$jid,':valor_hora_1'=>$valor_hora[1],':valor_hora_2'=>$valor_hora[2])
+              );
+
+
+/*
+
+
+
+    db_query("INSERT personal_jornada_productividad (jid,pid,tipo,cajas,cajas_eq,diff_cajas,diff_eq,coeff,state,monto)
+                  SELECT jid,pid,'resto',0,0,0,0,1,1,
+                       numeric_work*:valor_hora_unificado 
+                  AS monto 
+                  FROM planta_personal_jornada 
+                  WHERE jid=:jid AND work_type IN ('varios','acomodador')", 
+                        array(':jid'=>$jid,':valor_hora_unificado'=>$valor_hora_unificado)
+              );
+
+
+*/
+
+  
+/*  db_query("UPDATE 
+              planta_personal_jornada  ppj 
+              JOIN personal p ON p.pid=ppj.pid
+              JOIN jornadas j ON j.jid=ppj.jid
+              LEFT JOIN valores_perido vp ON (vp.grupo='categorias' AND  p.categoria=vp.codigo 
+                      AND j.start_time>=vp.start_time AND j.end_time<=vp.end_time)  
+              SET ppj.monto = vp.valor
+              WHERE ppj.jid=:jid
+              ",array(':jid'=>$jid));
+
+
+return;
+}*/
 
 function ajuste_productividad($form,&$form_state,$jid,$pid){
 
@@ -210,7 +323,9 @@ function productividad_import_day($jid){
     productividad_planta_import_jid($jid);
     set_planta_personal_jornada($jid);
     set_productividad_jornada_otros($jid);
-      $table=array();
+    
+
+    $table=array();
     $rows=db_select('personal_jornada_productividad','jp')->fields('jp')->condition('jid',$jid)->execute();
     while ( $r = $rows->fetchAssoc()) {
         if(!@$table['header'])$table['header']=array_keys($r);
@@ -229,14 +344,27 @@ function productividad_import_day($jid){
     $return.= theme('table',$table);
     return $return;
 }
+function calcular_producion($horas_reales,$horas_esperadas,$prod_esperada){
 
+  if($horas_reales>=$horas_esperadas || $horas_reales==0) return $prod_esperada;
+  return ($prod_esperada*$horas_reales)/$horas_esperadas;
+}
 
 function productividad_import_jid($jid){
 
 
     $jornada=array_shift(entity_load('data_jornadas',array($jid)));
+    $day_number=date('N',$jornada->start_time);
+
     $coefficiene_ajustes=coefficientes_ajuste_jornada($jid);
     $valores=get_valores_for_time($jornada->start_time);
+
+
+    $producion_esperada=array();
+    $producion_esperada[1][1]=calcular_producion($jornada->production_time[1][1],$valores['horasdia'][$day_number]*UNA_HORA,$valores['volumenes']['mnz']);
+    $producion_esperada[1][2]=calcular_producion($jornada->production_time[1][2],$valores['horasdia'][$day_number]*UNA_HORA,$valores['volumenes']['mnz']);
+    $producion_esperada[2][1]=calcular_producion($jornada->production_time[2][1],$valores['horasdia'][$day_number]*UNA_HORA,$valores['volumenes']['pera']);
+    $producion_esperada[2][2]=calcular_producion($jornada->production_time[2][2],$valores['horasdia'][$day_number]*UNA_HORA,$valores['volumenes']['pera']);
 
     $prod_pera=$valores['volumenes']['pera'];
     $prod_mzn=$valores['volumenes']['mnz'];
@@ -246,31 +374,31 @@ function productividad_import_jid($jid){
     
 
     $result=db_query("SELECT
-          `env`.`ESPECIE`  AS  especie,
+          env.ESPECIE  AS  especie,
         DATE(INGRESO) AS dia, 
-          `e`.`LEGAJO`    AS legajo,
-          `e`.`NOMBRE`    AS nombre,
+          e.LEGAJO    AS legajo,
+          e.NOMBRE    AS nombre,
 
-          SUM(`emb`.`EQ`)      AS cajas,
-          SUM(`emb`.`EQ` * `env`.`EQ`) AS cajas_eq,
-          IF(max(`env`.`ESPECIE`) =1, {$prod_mzn},{$prod_pera}) AS prod_esperada,
-          (SUM(`emb`.`EQ` ) - IF(`env`.`ESPECIE` =1, {$prod_mzn},{$prod_pera})) AS diff_cajas,
-          (SUM(`emb`.`EQ` * `env`.`EQ`) - IF(`env`.`ESPECIE` =1, {$prod_mzn},{$prod_pera})) * AVG(`env`.`EQ`) AS diff_eq,
-           
-          `e`.`TURNO`     AS `turno`,
-          `c`.`LINEA`     AS `linea`
-        FROM (((`fruitid`.`cajas` `c`
-             JOIN `fruitid`.`embaladores` `e`
-               ON ((`e`.`EMBALADOR` = `c`.`EMBALADOR`)))
-            JOIN `fruitid`.`envases` `env`
-              ON ((`c`.`ENVASE` = `env`.`ENVASE`)))
-           JOIN `fruitid`.`embalados` `emb`
-             ON ((`c`.`EMBALADO` = `emb`.`EMBALADO`)))
-        WHERE ((`c`.`EMPRESA` = 1)
-               AND (`c`.`PALLET` >= 0))
+          SUM(emb.EQ)      AS cajas,
+          SUM(emb.EQ * env.EQ) AS cajas_eq,
+          /*IF(max(env.ESPECIE) =1, {$prod_mzn},{$prod_pera}) AS prod_esperada,
+          (SUM(emb.EQ ) - IF(env.ESPECIE =1, {$prod_mzn},{$prod_pera})) AS diff_cajas,
+          (SUM(emb.EQ * env.EQ) - IF(env.ESPECIE =1, {$prod_mzn},{$prod_pera})) * AVG(env.EQ) AS diff_eq,
+           */
+          e.TURNO     AS turno,
+          c.LINEA     AS linea
+        FROM (((fruitid.cajas c
+             JOIN fruitid.embaladores e
+               ON ((e.EMBALADOR = c.EMBALADOR)))
+            JOIN fruitid.envases env
+              ON ((c.ENVASE = env.ENVASE)))
+           JOIN fruitid.embalados emb
+             ON ((c.EMBALADO = emb.EMBALADO)))
+        WHERE ((c.EMPRESA = 1)
+               AND (c.PALLET >= 0))
         AND DATE(INGRESO)='".$date_string."'
-         GROUP BY DATE(INGRESO), e.EMBALADOR ");
-// quito el , `env`.`ESPECIE`
+         GROUP BY DATE(INGRESO), e.EMBALADOR ,env.ESPECIE");
+// quito el , 
     $procesados=array();
     db_delete('personal_jornada_productividad')->condition('jid',$jornada->jid)->execute();
     foreach ($result as $item){
@@ -285,53 +413,95 @@ function productividad_import_jid($jid){
         $ajuste=(@$coefficiene_ajustes[$personal[$item->legajo]->pid])?$coefficiene_ajustes[$personal[$item->legajo]->pid]:1;
 
         if(!isset($procesados[$item->legajo])){
+        	
+        		/* IVAN */
+        	
+        		/*$pid_i = $personal[$item->legajo]->pid;
+        		$jid_i = $jornada->jid;
+        		$bool_existe_elem = FALSE;
+        		
+        		$ext_time_i = db_query("
+        		SELECT time_extra
+        		FROM planta_personal_jornada
+        		WHERE time_extra > 0 AND pid = ".$pid_i." AND jid = ".$jid_i)->fetchAll();
+        		
+        		foreach($ext_time_i as $elem){
+        		
+        			$ext_time_i = $elem;
+        		
+        			$bool_existe_elem = TRUE;
+        		
+        		}
+
+            $cajas_esperadas=$producion_esperada[$item->linea][$item->especie];
             
-            if($ajuste!=1){
-                $diff=$item->cajas_eq + $item->cajas_eq *$ajuste;
-                echo $diff;
-                $monto=($diff>$item->prod_esperada)?($item->prod_esperada-$item->cajas_eq)*$valores['montos']['porcaja']:0;                
+            if($bool_existe_elem){
+            	
+            	$hs_reales = $jornada->production_time[$item->linea][$item->especie];
+            	$hs_base = $valores['horasdia'][$day_number];
+            	//$hs_esperadas = $valores['horasdia'][$day_number]*UNA_HORA;
+            	
+            	//if($hs_reales>=$hs_esperadas || $hs_reales==0){
+            	
+            		//$hs_finales = $hs_base + $ext_time_i->time_extra;
+            		//$hs_esperadas = $hs_base;
+            		
+            	//}
+            	//else{
+            	
+            		//$hs_finales = $hs_reales + $ext_time_i->time_extra;
+            		//$hs_esperadas = $hs_reales;
+            	
+            	//}
+            	
+            	$hs_finales = $hs_base + $ext_time_i->time_extra;
+         		$hs_esperadas = $hs_base;
+            
+	            $cajas_esperadas = ($hs_finales * $cajas_esperadas)/$hs_esperadas;
+            
+            }*/
+            
+            $cajas_esperadas=$producion_esperada[$item->linea][$item->especie];
+            
+            $diff_eq= $item->cajas_eq -$cajas_esperadas;
+            $diff_cajas= $item->cajas -$cajas_esperadas;
 
+            if($ajuste!=1) $diff_eq=$item->cajas_eq + $item->cajas_eq *$ajuste;
 
-            } else {
-                $monto=($item->diff_eq>0)?$item->diff_eq*$valores['montos']['porcaja']:0;
-            }
-            $procesados[$item->legajo]=$item;
-
-            db_insert('personal_jornada_productividad')->
-                fields(array(
+            $monto=($diff_eq>0)?$diff_eq*$valores['montos']['porcaja']:0;
+            $procesados[$item->legajo]=array(
                         "jid"=>$jornada->jid,
                         "pid"=>$personal[$item->legajo]->pid,
                         "tipo"=>'embalador',
                         "cajas"=>$item->cajas,
                         "cajas_eq"=>$item->cajas_eq,
-                        "diff_cajas"=>$item->diff_cajas,
-                        "diff_eq"=>$item->diff_eq,
+                        "diff_cajas"=>$diff_cajas,
+                        "diff_eq"=>$diff_eq,
                         "coeff"=>$ajuste,
                         "state"=>1,
                         "monto"=>$monto,
-                    )) -> execute();
-           db_update('personal_jornada')->fields(array('work_type' =>'Embalador' ,'planta' =>$item->linea ))->condition('jid',$jornada->jid)->condition('pid',$personal[$item->legajo]->pid)->condition('work_type','nn')->execute();
+                    );
+
+//ver esto !!! //condition('work_type','nn')->
+           db_update('personal_jornada')->fields(array('work_type' =>'Embalador' ,'planta' =>$item->linea ))->condition('jid',$jornada->jid)->condition('pid',$personal[$item->legajo]->pid)->execute();
 
         } else{
+            $procesados[$item->legajo]["cajas"]+=$item->cajas;
+            $procesados[$item->legajo]["cajas_eq"]+=$item->cajas_eq;
+            $procesados[$item->legajo]["diff_cajas"]+=$item->diff_cajas;
+            $procesados[$item->legajo]["diff_eq"]+=$item->diff_eq;
+            $procesados[$item->legajo]["monto"]+=$monto;
 
-/*
-            $total=$item->cajas+$procesados[$item->legajo]->cajas;
-            $primer_especie_porcentaje=($procesados[$item->legajo]->cajas*1)/$total;
-            $segunda_especie_porcentaje=($item->cajas*1)/$total;
-            $item->prod_esperada=($item->prod_esperada * 1
-            //$item->cajas_eq+=$procesados[$item->legajo]->cajas_eq;
-            //$total-> 100
-            //$to
-            
-            $item->cajas+=$procesados[$item->legajo]->cajas;            
-            $item->cajas_eq+=$procesados[$item->legajo]->cajas_eq;*/            
-            drupal_set_message("El Legajo {$item->legajo} Tiene varias especies ",'error');
+           drupal_set_message("El Legajo {$item->legajo} Tiene varias especies ");
 
-            $procesados[$item->legajo]=$item;
 
         }
 
+
     
+    }
+    foreach ($procesados as $legajo => $fields) {
+          db_insert('personal_jornada_productividad')->fields($fields) -> execute();
     }
 
     
@@ -347,7 +517,9 @@ function productividad_planta_import_jid($jid){
 
 
     $date_string=format_date($jornada->start_time,'custom','Y-m-d');
-    
+    #to-do: contar los emaladores reales por planta
+
+
     $result=db_query("SELECT
           `env`.`ESPECIE`  AS  especie,
         DATE(INGRESO) AS dia, 

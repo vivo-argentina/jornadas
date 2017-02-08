@@ -4,7 +4,7 @@ function valores_table(){
     $q=db_query('SELECT DISTINCT start_time,end_time FROM valores_perido');
     $table=array();
     foreach ($q as $value) {
-      $table['rows'][]=array(l(format_date($value->start_time) . " " . format_date($value->end_time), "jornadas/valores/perido/{$value->start_time}/{$value->end_time}"));
+      $table['rows'][]=array(l(format_date($value->start_time) . " " . format_date($value->end_time), "jornadas/valores/perido/{$value->start_time}/{$value->end_time}"),l('Eliminar', "jornadas/valores/delete/{$value->start_time}/{$value->end_time}"));
     }
     return theme('table',$table);
 }
@@ -202,4 +202,11 @@ function valores_jornada_submit($form,&$form_state){
             'end_time' => $form_state['values']['end_time']
 
         )) ->execute();
+}
+
+function valores_delete($start_time,$end_time){
+
+  db_delete('valores_perido')->condition('start_time',$start_time)->condition('end_time',$end_time)->execute();
+  drupal_set_message('Se elimino el periodo');
+
 }

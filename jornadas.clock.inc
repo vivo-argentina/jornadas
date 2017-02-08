@@ -1,15 +1,67 @@
 <?php
 
-function clock_bulk_import(){
+function bulk_process_clock($form,&$form_state){
+    $from['coment']=array('#markup'=>'Regerar los datos.Borra las cofiguraciones previas');
 
-    $default_start=strtotime('2/1/2015 00:00:00');
+    $from['start_time']=array('#type'=>'date', '#title'=>'inicio');
+    $from['end_time']=array('#type'=>'date', '#title'=>'final');
+
+    $from['enviar']=array('#type'=>'submit', '#value'=>'procesar');
+    return $from;
+}
+function bulk_process_clock_validate($form,&$form_state){
+  $form_state['values']['start_time']=mktime(0,0,0,$form_state['values']['start_time']['month'],$form_state['values']['start_time']['day'],$form_state['values']['start_time']['year']);
+  $form_state['values']['end_time']=mktime(23,59,58,$form_state['values']['end_time']['month'],$form_state['values']['end_time']['day'],$form_state['values']['end_time']['year']);
+
+	if($form_state['values']['start_time'] > $form_state['values']['end_time']){
+		
+		form_set_error("Fecha de Jornada Incorrecta.");
+		drupal_set_message(t("Fecha de Jornada Incorrecta."), 'error');
+			
+	}
+
+}
+function bulk_process_clock_submit($form,&$form_state){
+    
+    $default_start=strtotime('1/1/2015 00:00:00');
     $start=variable_get('clock_last_time_import',$default_start);
-    $start=$default_start;
+ #   $start=$default_start;
 
+	db_delete('personal_jornada')
+	->condition('start_time',$form_state['values']['start_time'] ,'>=')
+	->condition('start_time',$form_state['values']['end_time'] ,'<=')
+	->execute();
 
-    for ($i=$start; $i < $start + (160*UN_DIA); $i=$i+UN_DIA) { 
+    for ($i=$form_state['values']['start_time']; $i <= $form_state['values']['end_time']; $i=$i+UN_DIA) { 
 
       $operations[]=array('process_clock_data',array(1,$i));
+      if($i>time()) break;
+
+    }
+    variable_set('clock_last_time_import',$i);
+    
+ $batch = array(
+    'operations' => $operations,
+    'finished' => 'batch_clock_finished',
+    
+  );
+    batch_set($batch);
+        batch_process('jornadas-laborales');
+
+}
+
+
+function clock_bulk_import(){
+
+    $default_start=strtotime('12/1/2015 00:00:00');
+    $start=variable_get('clock_last_time_import',$default_start);
+    #$start=$default_start;
+
+
+    for ($i=$start; $i < $start + (250*UN_DIA); $i=$i+UN_DIA) { 
+
+      $operations[]=array('process_clock_data',array(1,$i));
+      if($i>time()) break;
 
     }
     variable_set('clock_last_time_import',$i);
@@ -28,7 +80,12 @@ function batch_clock_finished(){
 
 }
 
-function process_clock_data($jid,$start_time){
+
+function process_clock_data_cron($jid=1){
+    $default_start=strtotime('1/1/2015 00:00:00');
+
+    $start_time=variable_get('clock_last_time_import',$default_start);
+
     $jornada=array();
     $personal=array();
     $data=get_fichajes_for_day($start_time);
@@ -39,6 +96,50 @@ function process_clock_data($jid,$start_time){
         
 
         $values['day_stamp']=floor( $values['jornada_time'] /UN_DIA);
+
+        $last_time=$values['real_time'];
+        if(!isset($jornada[$values['day_stamp']])){
+            if(!$jornada[$values['day_stamp']]=get_jid($values['real_time'])){
+                $jornada[$values['day_stamp']]=jornada_create($values['real_time']);
+                if($jornada[$values['day_stamp']]==False) continue;
+
+            }   else {
+             $jornada[$values['day_stamp']]=array_shift( $jornada[$values['day_stamp']]);
+            }
+
+        }
+        if($values[2]=='E'){
+            clock_new_recurrencia($values,$jornada[$values['day_stamp']]->jid);            
+        } elseif($values[2]=='S'){
+          clock_set_salida($values,$jornada[$values['day_stamp']]);
+        }
+
+
+    }
+    variable_set('clock_last_time_import',$last_time);
+
+    return $last_time;
+}
+
+function reprocess_clock_data_time($date){
+  $time=strtotime($date);
+  return  process_clock_data(0,$time,true);
+
+}
+
+function process_clock_data($jid,$start_time,$log=false){
+
+    $jornada=array();
+    $personal=array();
+    $data=get_fichajes_for_day($start_time);
+    $last_time=$start_time;
+    foreach ($data as  $values) {
+        $values['real_time']=make_real_time($values);
+        $values['jornada_time']=make_jornada_time($values);
+        
+
+        $values['day_stamp']=floor( $values['jornada_time'] /UN_DIA);
+        #if($log) print_r($values);
 
         $last_time=$values['real_time'];
         if(!isset($jornada[$values['day_stamp']])){
@@ -74,14 +175,14 @@ function clock_new_recurrencia($value,$jid,$start_confirmed=1){
         $recurrencia->start_confirmed=$start_confirmed;
         $recurrencia->present=1;
         $recurrencia->planta=0;
-        
+
        try {
               drupal_write_record('personal_jornada',$recurrencia);
-              
           } catch (Exception $e) {
              drupal_set_message( $e->getMessage());
           }
 
+	
 }
 function clock_set_salida($value,$jornada){
         $personal=get_personal_by_legajo($value[3]);
@@ -158,7 +259,9 @@ function call_clock($url,$query=array()){
                 'timeout' => 15,
                 'headers' => array('Content-Type' => 'application/json'),
         );
-  $request = drupal_http_request(variable_get('clock_server','http://192.168.1.109:5000/'  ). $url  , $options);
+  $request = drupal_http_request(variable_get('clock_server','http://192.168.1.251:5000/'  ). $url  , $options);
+  # $request = drupal_http_request(variable_get('clock_server','http://192.168.1.251:5000/'  ). $url  , $options);
+
   return json_decode($request->data);
 
 }
@@ -261,17 +364,21 @@ function clock_empacador_new_recurrencia($personal,$jid,$start_time,$end_time,$c
 }
 
 function clock_import_personal(){
+	
+	$sda = "Personal Importado";
+	
   $legajos=call_clock("legajos");
+  //print_r($legajos);
   foreach ($legajos as $legajo) {
       db_merge('personal')
       ->key(
         array(
-          'legajo' => intval($legajo[0])
+          'legajo' => intval($legajo[1])
           )
         )
       ->fields(array(
-            'legajo' => intval($legajo[0]),
-            'name' => $legajo[1],
+            'legajo' => intval($legajo[1]),
+            'name' => $legajo[2],
             'active' => 1,
             'change_date' => time(),
             'create_date' => time(),
@@ -279,6 +386,8 @@ function clock_import_personal(){
       ))
       ->execute();
   }
+  
+  return $sda;
 
 }
 

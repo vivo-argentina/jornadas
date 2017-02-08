@@ -1,6 +1,6 @@
 <?php
 
-function lista_meses(){
+/*function lista_meses(){
     $table=array();
 
     $meses=db_query("SELECT DISTINCT MONTH(FROM_UNIXTIME(start_time)) AS mes ,YEAR(FROM_UNIXTIME(start_time)) AS anio FROM jornadas " );
@@ -14,12 +14,58 @@ function lista_meses(){
 
     return theme('table',$table) . theme('link_csv');
 
+}*/
+
+function productividad_demanda_intervalo($form,&$form_state){
+	
+    $from['coment']=array('#markup'=>t('<h3>La productividad sera calculada dentro del intervalo.</h3>'));
+
+    $from['start_time']=array('#type'=>'date', '#title'=>'Inicio');
+    $from['end_time']=array('#type'=>'date', '#title'=>'Fin');
+
+    $from['enviar']=array('#type'=>'submit', '#value'=>'Calcular');
+    
+    return $from;
+}
+
+function productividad_demanda_intervalo_validate($form,&$form_state){
+	
+  $form_state['values']['start_time']=mktime(0,0,0,$form_state['values']['start_time']['month'],$form_state['values']['start_time']['day'],$form_state['values']['start_time']['year']);
+  $form_state['values']['end_time']=mktime(23,59,58,$form_state['values']['end_time']['month'],$form_state['values']['end_time']['day'],$form_state['values']['end_time']['year']);
+
+	if($form_state['values']['start_time'] > $form_state['values']['end_time']){
+
+		form_set_error("Periodo Incorrecto");
+      drupal_set_message(t("<strong>Periodo Incorrecto</strong></br>La fecha final debe ser posterior a la inicial"), 'error');
+	
+	
+	}
+
+}
+
+function productividad_demanda_intervalo_submit($form,&$form_state){
+	
+	unset($_GET['destination']);
+	
+	unset($form_state['rebuild']);  // if $form_state['rebuild'] == TRUE, the redirect will be ignored
+	
+	
+	
+   $form_state['redirect'] = array('jornadas/demanda/'.$form_state["values"]["start_time"].'/'.$form_state["values"]["end_time"]);//, array('fragment' => 'anchorid'));
+   
+    // array('fragment' => 'anchorid') is used because I needed redirection to an anchor in specific node	
+	
 }
 
 
-function personal_mensual($month,$year=2015){
+
+function personal_demanda($inicio,$final){
+	
+	$t_inicio = date('d-m-Y',$inicio);
+	$t_fin = date('d-m-Y',$final);
+	
     $table=array();
-    drupal_set_title("{$month}/{$year}");
+    drupal_set_title("{$t_inicio} a {$t_fin}");
 
 
 
@@ -28,11 +74,12 @@ function personal_mensual($month,$year=2015){
                         JOIN personal p ON p.pid=ppj.pid
                         JOIN jornadas j ON j.jid=ppj.jid
                         LEFT JOIN personal_jornada_productividad pjp ON (ppj.jid= pjp.jid AND ppj.pid=pjp.pid)
-                        WHERE 
-                        MONTH(FROM_UNIXTIME(j.start_time))=:month
-                        AND YEAR(FROM_UNIXTIME(j.start_time))=:year
+                        WHERE
+                        j.start_time >= :inicio
+                        AND
+                        j.start_time < :fin
                         GROUP BY ppj.pid
-                        " , array(':month'=>$month,':year'=>$year));
+                        " , array(':inicio'=>$inicio,':fin'=>$final));
 
     $i=0;
     foreach ($personal as $persona) {
@@ -42,28 +89,9 @@ function personal_mensual($month,$year=2015){
         
         $hx=intval($persona ->time_extra/3600);
         $mx=intval(($persona ->time_extra/3600-$hx)*60);
-
-		  
-		  /*
-        
-        $monto = $persona ->monto;
-        
-        $sueldo = $persona ->sueldo;
-        
-        $prod = 
-        
-        $total = $monto + $sueldo;
-
-
-
-        $table['rows'][]=array($i,"{$persona ->legajo} " ,l($persona ->name, "jornadas/resumen/{$month}/{$year}/{$persona ->pid}"), "{$persona ->categoria}",$persona ->dias,$persona ->jornadas,"$h horas $m minutos","$hx horas $mx minutos",number_format($prod,2,',','.'),number_format($sueldo,2,',','.'),
-                    number_format($total,2,',','.')
-            );  
-        
-        */
 		  
 
-        $table['rows'][]=array($i,"{$persona ->legajo} " ,l($persona ->name, "jornadas/resumen/{$month}/{$year}/{$persona ->pid}"), "{$persona ->categoria}",$persona ->dias,$persona ->jornadas,"$h horas $m minutos","$hx horas $mx minutos",number_format($persona ->monto,2,',','.'),number_format($persona ->sueldo,2,',','.'),
+        $table['rows'][]=array($i,"{$persona ->legajo} " ,l($persona ->name, "jornadas/demanda/{$inicio}/{$final}/{$persona ->pid}"), "{$persona ->categoria}",$persona ->dias,$persona ->jornadas,"$h horas $m minutos","$hx horas $mx minutos",number_format($persona ->monto,2,',','.'),number_format($persona ->sueldo,2,',','.'),
                     number_format($persona ->monto + $persona ->sueldo,2,',','.')
             );  
     }
@@ -73,12 +101,15 @@ function personal_mensual($month,$year=2015){
     return theme('table',$table) .  theme('link_csv');
 
 }
-function personal_resumen_mensual($month,$year,$pid){
+function personal_demanda_particular($inicio,$final,$pid){
+	
+	$t_inicio = date('d-m-Y',$inicio);
+	$t_fin = date('d-m-Y',$final);
 
     $table=array();
     $personal=entity_load('data_personal',array($pid));
 
-    drupal_set_title("{$personal[$pid]->name}, {$month}/{$year}");
+    drupal_set_title("{$personal[$pid]->name}, {$t_inicio} a {$t_fin}");
    $personal=db_query("SELECT ppj.jid, ppj.pid, j.start_time  ,numeric_work as jornadas,time_work as tiempo , ppj.work_type, pjp.monto as monto ,
                             ppj.monto * numeric_work as sueldo , p.categoria ,time_extra
                         FROM planta_personal_jornada ppj
@@ -86,10 +117,12 @@ function personal_resumen_mensual($month,$year,$pid){
                         JOIN jornadas j ON j.jid=ppj.jid
                         LEFT JOIN personal_jornada_productividad pjp ON (ppj.jid= pjp.jid AND ppj.pid=pjp.pid)
                         WHERE 
-                        MONTH(FROM_UNIXTIME(j.start_time))=:month
-                        AND YEAR(FROM_UNIXTIME(j.start_time))=:year
-                        and ppj.pid = :pid
-                        " , array(':month'=>$month,':year'=>$year,':pid'=>$pid));
+                        j.start_time >= :inicio
+                        AND
+                        j.start_time < :fin
+                        AND
+                        ppj.pid = :pid
+                        " , array(':inicio'=>$inicio,':fin'=>$final,':pid'=>$pid));
 
 
   $i=0;
