@@ -35,6 +35,7 @@ echo "update personal_jornada set planta={$form_state['values']['planta']}
           TIME(FROM_UNIXTIME(start_time)) between '{$form_state['values']['start_hour']}' AND '{$form_state['values']['end_hour']}'
 
         ";
+        die();
 /*
   db_query("update personal_jornada set planta=:planta 
         where (start_time>=:start_time and start_time <= :end_time) and  
