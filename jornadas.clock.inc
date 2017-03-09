@@ -7,8 +7,8 @@ function bulk_set_planta($form,&$form_state){
     $form['start_time']=array('#type'=>'date', '#title'=>'inicio');
     $form['end_time']=array('#type'=>'date', '#title'=>'final');
 
-    $form['start_hour']=array('#type'=>'textfield', '#title'=>'final','#default'=>'07:45:00');
-    $form['end_hour']=array('#type'=>'textfield', '#title'=>'final','#default'=>'08:45:00');
+    $form['start_hour']=array('#type'=>'textfield', '#title'=>'Hora inicial','#default_value'=>'07:45:00');
+    $form['end_hour']=array('#type'=>'textfield', '#title'=>'hora final','#default_value'=>'08:45:00');
 
     $form['planta']=array('#type' =>'select' ,'#options' => array(1=>'Planta 1',2=>'Planta 2'),'#default_value'=>$recurrencia->planta,'#title'=>'Planta');
 
