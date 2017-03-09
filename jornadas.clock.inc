@@ -35,8 +35,6 @@ echo "update personal_jornada set planta={$form_state['values']['planta']}
           TIME(FROM_UNIXTIME(start_time)) between '{$form_state['values']['start_hour']}' AND '{$form_state['values']['end_hour']}'
 
         ";
-        die();
-/*
   db_query("update personal_jornada set planta=:planta 
         where (start_time>=:start_time and start_time <= :end_time) and  
           TIME(FROM_UNIXTIME(start_time)) between ':start_hour' AND ':end_hour'
@@ -45,7 +43,8 @@ echo "update personal_jornada set planta={$form_state['values']['planta']}
                   ':start_time'=>$form_state['values']['start_time'],
                   ':end_time'=>$form_state['values']['end_time'],
                   ':start_hour'=>$form_state['values']['start_hour'],
-                  ':end_hour'=>$form_state['values']['end_hour']));*/
+                  ':end_hour'=>$form_state['values']['end_hour']));
+die();
 }
 
 function bulk_process_clock($form,&$form_state){
