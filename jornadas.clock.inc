@@ -30,6 +30,12 @@ function bulk_set_planta_validate($form,&$form_state){
 
 }
 function bulk_set_planta_submit($form,&$form_state){
+echo "update personal_jornada set planta={$form_state['values']['planta']} 
+        where (start_time>={$form_state['values']['start_time']} and start_time <= {$form_state['values']['end_time']}) and  
+          TIME(FROM_UNIXTIME(start_time)) between '{$form_state['values']['start_hour']}' AND '{$form_state['values']['end_hour']}'
+
+        ";
+/*
   db_query("update personal_jornada set planta=:planta 
         where (start_time>=:start_time and start_time <= :end_time) and  
           TIME(FROM_UNIXTIME(start_time)) between ':start_hour' AND ':end_hour'
@@ -38,7 +44,7 @@ function bulk_set_planta_submit($form,&$form_state){
                   ':start_time'=>$form_state['values']['start_time'],
                   ':end_time'=>$form_state['values']['end_time'],
                   ':start_hour'=>$form_state['values']['start_hour'],
-                  ':end_hour'=>$form_state['values']['end_hour']));
+                  ':end_hour'=>$form_state['values']['end_hour']));*/
 }
 
 function bulk_process_clock($form,&$form_state){
