@@ -2,18 +2,18 @@
 
 
 function bulk_set_planta($form,&$form_state){
-    $from['coment']=array('#markup'=>'Regerar los datos.Borra las cofiguraciones previas');
+    $form['coment']=array('#markup'=>'Regerar los datos.Borra las cofiguraciones previas');
 
-    $from['start_time']=array('#type'=>'date', '#title'=>'inicio');
-    $from['end_time']=array('#type'=>'date', '#title'=>'final');
+    $form['start_time']=array('#type'=>'date', '#title'=>'inicio');
+    $form['end_time']=array('#type'=>'date', '#title'=>'final');
 
-    $from['start_hour']=array('#type'=>'texfield', '#title'=>'final','#default'=>'07:45:00');
-    $from['end_hour']=array('#type'=>'texfield', '#title'=>'final','#default'=>'08:45:00');
+    $form['start_hour']=array('#type'=>'texfield', '#title'=>'final','#default'=>'07:45:00');
+    $form['end_hour']=array('#type'=>'texfield', '#title'=>'final','#default'=>'08:45:00');
 
     $form['planta']=array('#type' =>'select' ,'#options' => array(1=>'Planta 1',2=>'Planta 2'),'#default_value'=>$recurrencia->planta,'#title'=>'Planta');
 
-    $from['enviar']=array('#type'=>'submit', '#value'=>'procesar');
-    return $from;
+    $form['enviar']=array('#type'=>'submit', '#value'=>'procesar');
+    return $form;
 }
 
 
