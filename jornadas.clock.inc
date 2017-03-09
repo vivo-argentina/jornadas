@@ -1,10 +1,52 @@
 <?php
 
+
+function bulk_set_planta($form,&$form_state){
+    $from['coment']=array('#markup'=>'Regerar los datos.Borra las cofiguraciones previas');
+
+    $from['start_time']=array('#type'=>'date', '#title'=>'inicio');
+    $from['end_time']=array('#type'=>'date', '#title'=>'final');
+
+    $from['start_hour']=array('#type'=>'texfield', '#title'=>'final','#default'=>'07:45:00');
+    $from['end_hour']=array('#type'=>'texfield', '#title'=>'final','#default'=>'08:45:00');
+
+    $form['planta']=array('#type' =>'select' ,'#options' => array(1=>'Planta 1',2=>'Planta 2'),'#default_value'=>$recurrencia->planta,'#title'=>'Planta');
+
+    $from['enviar']=array('#type'=>'submit', '#value'=>'procesar');
+    return $from;
+}
+
+
+function bulk_set_planta_validate($form,&$form_state){
+  $form_state['values']['start_time']=mktime(0,0,0,$form_state['values']['start_time']['month'],$form_state['values']['start_time']['day'],$form_state['values']['start_time']['year']);
+  $form_state['values']['end_time']=mktime(23,59,58,$form_state['values']['end_time']['month'],$form_state['values']['end_time']['day'],$form_state['values']['end_time']['year']);
+
+  if($form_state['values']['start_time'] > $form_state['values']['end_time']){
+    
+    form_set_error("Fecha de Jornada Incorrecta.");
+    drupal_set_message(t("Fecha de Jornada Incorrecta."), 'error');
+      
+  }
+
+}
+function bulk_set_planta_submit($form,&$form_state){
+  db_query("update personal_jornada set planta=:planta 
+        where (start_time>=:start_time and start_time <= :end_time) and  
+          TIME(FROM_UNIXTIME(start_time)) between ':start_hour' AND ':end_hour'
+
+        " , array(':planta'=>$form_state['values']['planta'],
+                  ':start_time'=>$form_state['values']['start_time'],
+                  ':end_time'=>$form_state['values']['end_time'],
+                  ':start_hour'=>$form_state['values']['start_hour'],
+                  ':end_hour'=>$form_state['values']['end_hour']));
+}
+
 function bulk_process_clock($form,&$form_state){
     $from['coment']=array('#markup'=>'Regerar los datos.Borra las cofiguraciones previas');
 
     $from['start_time']=array('#type'=>'date', '#title'=>'inicio');
     $from['end_time']=array('#type'=>'date', '#title'=>'final');
+
 
     $from['enviar']=array('#type'=>'submit', '#value'=>'procesar');
     return $from;

@@ -260,6 +260,13 @@ $items['jornadas/demanda/%/%/%'] = array(
   		'file' => 'jornadas.clock.inc',
   );
    
+  $items['jornadas/set_bulk_planta'] = array(
+      'title' => t('Setear plantas'),
+      'page callback' => 'drupal_get_form',
+      'page arguments' => array('bulk_set_planta'),
+      'access arguments' => array('admin personal'),
+      'file' => 'jornadas.clock.inc',
+  );
 
   return $items;
 }
